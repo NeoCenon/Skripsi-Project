@@ -79,6 +79,18 @@ export default function ProductPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange]);
+
   // Fetch inventory items
   useEffect(() => {
     fetchItems()

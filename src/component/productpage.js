@@ -79,6 +79,10 @@ export default function ProductPage() {
     fetchItems()
   }, [currentPage, searchTerm, dateRange])
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+  
   async function fetchItems() {
 
     try {
@@ -88,7 +92,7 @@ export default function ProductPage() {
       let query = await supabase
         .from('products')
         .select('*')
-        .order('product_id', { ascending: true });;
+        .order('product_id', { ascending: true });
 
         
 

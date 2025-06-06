@@ -20,13 +20,7 @@
 }
 
 body {
-<<<<<<< HEAD
-  background: var(--foreground);
-  color: var(--background);
-  font-family: 'Poppins', sans-serif;
-=======
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
->>>>>>> 247a1088e2af0163633be44cf2f73df6631f171a
+  font-family: 'Poppins', Arial, Helvetica, sans-serif;
 }

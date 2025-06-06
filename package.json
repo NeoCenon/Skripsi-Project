@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-<<<<<<< HEAD
     "@fontsource/poppins": "^5.2.6",
     "@prisma/client": "^6.8.2",
     "@supabase/supabase-js": "^2.49.8",
@@ -17,7 +16,7 @@
     "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
     "mysql2": "^3.14.1",
-    "next": "^15.3.1",
+    "next": "15.3.1",
     "react": "^19.1.0",
     "react-date-range": "^2.0.1",
     "react-dom": "^19.1.0",
@@ -40,17 +39,4 @@
   "keywords": [],
   "author": "",
   "license": "ISC"
-=======
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.3.1"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.3.1",
-    "@eslint/eslintrc": "^3"
-  }
->>>>>>> 247a1088e2af0163633be44cf2f73df6631f171a
 }

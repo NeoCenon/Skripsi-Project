@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect } from 'react'
-import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar } from "react-icons/fi";
+import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar, FiMoreVertical } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -22,9 +22,8 @@ export default function SupplierPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null);
-
+  const [openMenuId, setOpenMenuId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
@@ -63,6 +62,10 @@ export default function SupplierPage() {
     fetchItems()
   }, [currentPage, searchTerm, dateRange])
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   async function fetchItems() {
 
     try {
@@ -71,7 +74,8 @@ export default function SupplierPage() {
 
       let { data, error: supabaseError } = await supabase
       .from('suppliers')
-      .select('supplier_id, supplier_name, supplier_address, supplier_phone');
+      .select('supplier_id, supplier_name, supplier_address, supplier_phone')
+      .order('supplier_id', { ascending: true });
 
       if (supabaseError) throw supabaseError;
 
@@ -207,26 +211,62 @@ export default function SupplierPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg overflow-hidden mt-6">
+            <div className="bg-white rounded-lg mt-6" style={{ overflow: 'visible' }}>
               <table className="w-full border-[2px] border-gray-300 font-[Poppins]">
                 <thead>
                   <tr className="border-b-[2px] text-[16px] font-normal text-center">
                   <th className="p-4">Supplier ID</th>
                   <th className="p-4">Name</th>
                   <th className="p-4">Address</th>
-                  <th className="p-4">Phone</th>
+                  <th className="p-4">Phone Number</th>
                   <th className="p-4"></th>
                 </tr>
                 </thead>
 
                 <tbody>
                   {paginatedRows.map((row, index) => (
-                    <tr key={row.supplier_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center">
-                        <td className="p-4">{row.supplier_id}</td>
-                        <td className="p-4">{row.supplier_name}</td>
-                        <td className="p-4">{row.supplier_address}</td>
-                        <td className="p-4">{row.supplier_phone}</td>
-                        <td className="p-4"><button className="h-[32px]">:</button></td>
+                    <tr key={row.supplier_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
+                      <td className="p-4">{row.supplier_id}</td>
+                      <td className="p-4">{row.supplier_name}</td>
+                      <td className="p-4">{row.supplier_address}</td>
+                      <td className="p-4">{row.supplier_phone}</td>
+                      <td className="p-4 relative">
+                        <button
+                          onClick={() => setOpenMenuId(openMenuId === row.supplier_id ? null : row.supplier_id)}
+                          className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white transition duration-150 ease-in-out"
+                        >
+                          <FiMoreVertical size={20} />
+                        </button>
+
+                        {openMenuId === row.supplier_id && (
+                          <div
+                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
+                            onClick={(e) => e.stopPropagation()} 
+                          >
+                            <Link
+                              href={{
+                                pathname: '/editsupplier',
+                                query: {
+                                  supplier_id: row.supplier_id,
+                                  supplier_name: row.supplier_name,
+                                  supplier_address: row.supplier_address,
+                                  supplier_phone: row.supplier_phone,
+                                }
+                              }}
+                              passHref
+                            >
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
+                              >
+                                Edit
+                              </div>
+                            </Link>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

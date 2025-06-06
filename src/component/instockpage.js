@@ -83,6 +83,18 @@ export default function StockPage() {
     fetchItems()
   }, [currentPage, searchTerm, statusFilter, dateRange])
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateRange]);
+
   async function fetchItems() {
 
     try {
@@ -108,7 +120,7 @@ export default function StockPage() {
             `)
       .order('instock_id', { ascending: true });
 
-        // Apply status filter
+    // Apply status filter
     if (statusFilter) {
       query = query.ilike('instock_status', statusFilter.toLowerCase());
     }

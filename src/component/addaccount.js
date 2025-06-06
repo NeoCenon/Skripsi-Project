@@ -76,10 +76,10 @@ export default function AddAccount() {
   ];
 
   const fields = [
-    { label: "User Name", name: "username" },
+    { label: "Username", name: "username" },
     { label: "Email", name: "email" },
-    { label: "password", name: "password" },
-    { label: "role", name: "role" },
+    { label: "Password", name: "password" },
+    { label: "Role", name: "role" },
   ];
 
   return (
@@ -138,7 +138,10 @@ export default function AddAccount() {
         <div className="flex-1 bg-white p-12">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold">Add Account</h2>
-            <button className="text-2xl font-semibold text-gray-400">×</button>
+            <Link href="/accountmanagement">
+              <button className="text-2xl font-semibold hover:text-sky-700">×
+              </button>
+            </Link>
           </div>
 
           <div className="space-y-6">
@@ -181,7 +184,7 @@ export default function AddAccount() {
           <div className="mt-12 flex justify-end w-[600px]">
             <button
               onClick={handleSubmit}
-              className="bg-[#89E0F8] text-black font-semibold px-10 py-2 rounded-full"
+              className="bg-[#89E0F8] text-black font-semibold px-10 py-2 rounded-full hover:text-white hover:bg-[#89E0F8]"
             >
               Submit
             </button>
