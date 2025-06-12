@@ -11,6 +11,7 @@ import {
       FaClipboardList,
       FaUser,
       FaTruck,
+      FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 
@@ -18,6 +19,7 @@ export default function EditOrderPage() {
       const router = useRouter();
       const searchParams = useSearchParams();
       const order_id = searchParams.get("order_id");
+      const order_product_id = searchParams.get("order_product_id");
 
       const [products, setProducts] = useState([]);
       const [statuses, setStatuses] = useState(["Pending", "Completed"]); // you can fetch from DB if dynamic
@@ -37,47 +39,62 @@ export default function EditOrderPage() {
 
       // Fetch existing data
       useEffect(() => {
-      
-
       const fetchOrderDetails = async () => {
+      if (!order_product_id) {
+            console.error("Missing order_product_id in URL");
+            return;
+      }
+
       const { data, error } = await supabase
-            .from("orders")
-            .select(
-            `order_destination, order_status,
-            order_product:order_product(order_product_id, product_quantity, product_id, 
-            product:products(product_name, product_category))`
-            )
-            .eq("order_id", order_id)
+            .from("order_product")
+            .select(`
+                  order_product_id,
+                  product_quantity,
+                  orders (
+                  order_id,
+                  order_date,
+                  order_destination,
+                  order_status,
+                  user_id
+                  ),
+                  products (
+                  product_id,
+                  product_name,
+                  product_category
+                  )
+            `)
+            .eq("order_product_id", order_product_id)
             .single();
 
-      if (error) {
+      if (error || !data) {
             console.error("Fetch error:", error);
             return;
       }
+      const order = data.orders;
+      const product = data.products;
 
-      const orderProduct = Array.isArray(data.order_product)
-            ? data.order_product[0]
-            : data.order_product;
-
-      if (!orderProduct || !orderProduct.product) {
-            console.warn("Missing order product or product details");
+      if (!order || !product) {
+            console.warn("Missing order or product details");
             return;
+            
       }
 
       setFormData({
-            productName: orderProduct.product.product_name || "",
-            destination: data.order_destination || "",
-            quantity: orderProduct.product_quantity?.toString() || "",
-            status: data.order_status || "",
+            productName: product.product_name || "",
+            destination: order.order_destination || "",
+            quantity: data.product_quantity?.toString() || "",
+            status: order.order_status || "",
       });
-      setProductId(orderProduct.product_id); 
-      setInitialQuantity(orderProduct.product_quantity);
-
-      setOrderProductId(orderProduct.order_product_id);
+      setProductId(product.product_id);
+      setInitialQuantity(data.product_quantity);
+      setOrderProductId(data.order_product_id);
       };
-      if (order_id) fetchOrderDetails();
-      }, [order_id]);
+      if (order_product_id) {
+      fetchOrderDetails();
+      }
+      }, [order_product_id]);
       
+      // Fetch products for dropdown
       useEffect(() => {      
       const fetchProducts = async () => {
       const { data, error } = await supabase
@@ -97,19 +114,33 @@ export default function EditOrderPage() {
       const { destination, status, quantity } = formData;
       const updatedQty = parseInt(quantity);
 
-      if (!order_id) {
-            alert("Order ID is missing!");
-            return;
+      if (!order_id || !order_product_id || !productId) {
+      alert("Missing order, product, or order_product ID.");
+      return;
       }
 
-      if (!productId || isNaN(updatedQty) || !destination || !status) {
-            alert("All fields must be filled correctly!");
-            return;
-      }  
+      if (isNaN(updatedQty) || !destination || !status) {
+      alert("Please fill all fields correctly.");
+      return;
+      } 
 
-      if (!orderProductId) {
-            alert("Order product ID is missing!");
-            return;
+      // / Get product stockout or quantity
+      const { data: productData, error: productError } = await supabase
+      .from("products")
+      .select("product_quantity, product_stockout")
+      .eq("product_id", productId)
+      .single();
+
+      if (productError || !productData) {
+      alert("Failed to retrieve product info.");
+      return;
+      }
+
+      const maxAllowedQty = productData.product_stockout ?? productData.product_quantity;
+
+      if (updatedQty > maxAllowedQty) {
+      alert(`Quantity exceeds stock limit (${maxAllowedQty}).`);
+      return;
       }
 
       const quantityDelta = updatedQty - initialQuantity;
@@ -131,11 +162,17 @@ export default function EditOrderPage() {
       const { error: orderProductError } = await supabase
             .from("order_product")
             .update({product_quantity: updatedQty})
-            .eq("order_product_id", orderProductId);
+            .eq("order_product_id", order_product_id);
 
       if (orderProductError) {
             console.error("order_product update failed:", orderProductError);
       }
+
+      // const { error: stockError } = await supabase.rpc("adjust_product_quantity", {
+      // p_product_id: productId,
+      // p_quantity_delta: quantityDelta * -1, // decrease stock
+      // });
+
 
       if (orderError || orderProductError) {
             alert("Failed to update order!");
@@ -206,6 +243,7 @@ export default function EditOrderPage() {
                                     { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product" },
                                     { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order", active: true },
                                     { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier" },
+                                    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
                                     { icon: <FaUser size={24} />, label: "Account Management", href: "/accountmanagement" },
                               ].map((item, index) => (
                                     <Link href={item.href} key={index}>

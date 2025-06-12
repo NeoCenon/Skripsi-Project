@@ -11,6 +11,7 @@ import {
       FaClipboardList,
       FaUser,
       FaTruck,
+      FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 
@@ -187,6 +188,7 @@ export default function EditInstockPage() {
                                     { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product" },
                                     { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order" },
                                     { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier" },
+                                    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
                                     { icon: <FaUser size={24} />, label: "Account Management", href: "/accountmanagement" },
                               ].map((item, index) => (
                                     <Link href={item.href} key={index}>

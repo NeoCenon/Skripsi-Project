@@ -1,290 +1,121 @@
-<<<<<<< HEAD
-//Instock
-"use client";
+'use client'
 
-import Link from 'next/link'; 
-import { useState } from "react";
-import { FiMenu, FiSearch, FiBell, FiChevronDown } from "react-icons/fi";
-import {
-  FaBoxOpen,
-  FaChartBar,
-  FaClipboardList,
-  FaShoppingCart,
-  FaPlus,
-} from "react-icons/fa";
-import { MdOutlineInventory2 } from "react-icons/md";
+import { supabase } from '@/lib/supabase'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
-export default function Home() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+export default function Login() {
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const stockData = [
-    { id: "#7676", product: "Inverter", category: "cat1", status: "Completed" },
-    { id: "#7870", product: "Battery", category: "cat1", status: "Pending" },
-    { id: "#7970", product: "Generator", category: "cat1", status: "Completed" },
-    { id: "#8001", product: "Charger", category: "cat1", status: "Completed" },
-    { id: "#8010", product: "Power", category: "cat1", status: "Completed" },
-  ];
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setErrorMsg('')
+    setLoading(true)
 
-  const menuItems = [
-    { icon: <FaChartBar size={24} />, label: "Dashboard" },
-    { icon: <MdOutlineInventory2 size={24} />, label: "In Stock", active: true },
-    { icon: <FaBoxOpen size={24} />, label: "Products" },
-    { icon: <FaShoppingCart size={24} />, label: "Sales" },
-    { icon: <FaClipboardList size={24} />, label: "Orders" },
-  ];
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error || !data?.session || !data?.user) {
+      setErrorMsg('Email or password is incorrect.')
+      setLoading(false)
+      return
+    }
+
+    const { session, user } = data
+
+    // Optional: store JWT in localStorage or cookie
+    localStorage.setItem('access_token', session.access_token)
+
+    // Get user role from your `users` table (join by email or user ID)
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('user_role')
+      .eq('user_email', email)
+      .single()
+
+    if (userError || !userData) {
+      setErrorMsg('Failed to retrieve user role.')
+      setLoading(false)
+      return
+    }
+
+    const role = userData.user_role
+    localStorage.setItem('user_role', role) 
+
+    if (role === 'owner') {
+      router.push('/product')
+    } else if (role === 'admin') {
+      router.push('/product') // or wherever admins should land
+    } else {
+      setErrorMsg('Unknown user role.')
+    }
+
+    setLoading(false)
+  }
 
   return (
-    <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
-      {/* Top Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
-          </button>
-          <h1 className="text-xl font-semibold text-black">E-Inventoria</h1>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#f8f9fb]">
+      <div className="w-full max-w-md bg-white p-10 rounded-xl shadow-sm">
+        <h1 className="text-xl font-bold text-black mb-6">
+          <span className="text-black font-semibold">E</span>-Inventoria
+        </h1>
 
-        <div className="flex items-center gap-6">
-          <div className="relative">
+        <h2 className="text-lg font-semibold text-black mb-6">Login</h2>
+
+        {errorMsg && <p className="text-red-600 text-sm mb-4">{errorMsg}</p>}
+
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="block mb-1 text-sm font-medium text-black">
+              Email<span className="text-red-500">*</span>
+            </label>
             <input
-              type="text"
-              className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-[592px] h-[40px] text-black"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
+              className="w-full px-4 py-3 border border-gray-300 rounded-md bg-gray-100 text-black"
+              required
             />
-            <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
-          </div>
-          <FiBell size={20} className="text-black" />
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
-            <div className="flex flex-col items-center space-y-6 mt-6">
-              {menuItems.map((item, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${
-                    item.active ? "bg-[#203340]" : "hover:bg-[#203340]"
-                  }`}
-                >
-                  {item.icon}
-                  <span className="mt-1 text-[10px] text-white text-center">{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-white">
-          {/* Tabs */}
-          <div className="px-6 mt-4">
-            <div className="inline-flex rounded-t-lg overflow-hidden border border-gray-300">
-              <button className="px-6 py-2 text-gray-800 font-medium bg-[#FFE4B0] border-r border-gray-300 rounded-tl-lg">
-                Category 1
-              </button>
-              <button className="px-6 py-2 text-gray-800 font-medium bg-[#FFDA6A] border-r border-[#FFBF00]">
-                Category 2
-              </button>
-              <button className="px-6 py-2 text-gray-800 font-medium bg-[#FFDA6A] border-[#FFBF00] rounded-tr-lg">
-                Category 3
-              </button>
-            </div>
           </div>
 
-          {/* Content */}
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">In stock</h2>
-              <button className="flex items-center bg-[#1E88E5] text-white px-4 py-2 rounded-lg text-[24px] font-[Poppins]">
-                <FaPlus className="mr-2" />
-                New Stock
-              </button>
-            </div>
-
-            <div className="border-b-2 border-white mb-6"></div>
-
-            {/* Search & Filter */}
-            <div className="flex justify-between items-center mb-6">
-              <div className="relative w-[264px]">
-                <input
-                  type="text"
-                  placeholder="Quick Search"
-                  className="pl-10 pr-4 py-2 border rounded-md w-full h-[44px] text-black"
-                />
-                <FiSearch className="absolute left-3 top-2.5 text-gray-400" size={20} />
-              </div>
-
-              <div className="flex gap-4 items-center">
-                <div className="flex gap-2 items-center border px-4 h-[44px] rounded-md cursor-pointer">
-                  <span className="text-black text-[24px]">📅</span>
-                </div>
-
-                <button className="flex items-center gap-2 px-4 h-[44px] border rounded-md text-black text-[24px] font-[Poppins]">
-                  Status
-                  <FiChevronDown size={24} />
-                </button>
-              </div>
-            </div>
-
-            {/* Table */}
-            <div className="bg-white rounded-lg overflow-hidden mt-6">
-              <table className="w-full border-[2px] border-gray-300 font-[Poppins]">
-                <thead>
-                  <tr className="border-b-[2px]">
-                    <th className="p-4 text-left">
-                      <input type="checkbox" className="rounded" />
-                    </th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Order ID</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Product</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Category</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Sales channel</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Instruction</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Items</th>
-                    <th className="p-4 text-left text-gray-600 text-[20px] font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockData.map((item, index) => (
-                    <tr key={index} className="border-b-[2px] hover:bg-gray-50 text-[16px]">
-                      <td className="p-4">
-                        <input type="checkbox" className="rounded" />
-                      </td>
-                      <td className="p-4 text-gray-800">{item.id}</td>
-                      <td className="p-4 text-gray-800">{item.product}</td>
-                      <td className="p-4 text-gray-800">{item.category}</td>
-                      <td className="p-4 text-gray-800">Store name</td>
-                      <td className="p-4 text-gray-800">
-                        {(item.id !== "#7870" && item.id !== "#8010") ? "Stock adjustment" : ""}
-                      </td>
-                      <td className="p-4 text-gray-800">80/100</td>
-                      <td className="p-4">
-                        <span
-                          className={`px-4 py-1 rounded-full text-sm font-medium ${
-                            item.status === "Completed"
-                              ? "bg-[#52B788] text-black"
-                              : "bg-[#D1F2C7] text-green-800"
-                          }`}
-                          style={{ width: "167.71px", height: "30px", lineHeight: "30px" }}
-                        >
-                          {item.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-=======
-import Image from "next/image";
-
-export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Hello World
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+          <div className="mb-4">
+            <label className="block mb-1 text-sm font-medium text-black">
+              Password<span className="text-red-500">*</span>
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Minimum 8 characters"
+              className="w-full px-4 py-3 border border-gray-300 rounded-md bg-gray-100 text-black"
+              required
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-black text-white rounded-2xl font-semibold hover:bg-gray-800 transition disabled:opacity-60"
           >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
->>>>>>> 247a1088e2af0163633be44cf2f73df6631f171a
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-black">
+          Not registered yet?{' '}
+          <Link href="/register" className="text-black font-medium hover:underline">
+            Create a new account
+          </Link>
+        </p>
+      </div>
     </div>
-  );
+  )
 }

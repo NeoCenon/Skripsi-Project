@@ -2,14 +2,20 @@
 
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
-import { useState, useEffect } from 'react'
-import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar, FiMoreVertical } from "react-icons/fi";
+import { useState, useEffect, useRef } from 'react'
+import { 
+  FiMenu, 
+  FiSearch, 
+  FiBell, 
+  FiChevronDown, 
+  FiMoreVertical, 
+} from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
   FaClipboardList,
-  FaTruck,
   FaUser,
+  FaTruck,
   FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
@@ -17,20 +23,19 @@ import { DateRange } from 'react-date-range';
 import 'react-date-range/dist/styles.css'; 
 import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
-import { useRef } from 'react';
-import { useRouter } from 'next/navigation'
+import { useRouter } from 'next/navigation';
 
-export default function AccountManagementPage() {
+export default function HistoryOpnamePage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
 
   const [dateRange, setDateRange] = useState([
     {
@@ -47,15 +52,12 @@ export default function AccountManagementPage() {
     currentPage * pageSize
   );
 
-  const router = useRouter()
-
   useEffect(() => {
     const role = localStorage.getItem('user_role')
     if (role !== 'admin' && role !== 'owner') {
       router.push('/unauthorized')
     }
   }, [])
-
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -70,57 +72,56 @@ export default function AccountManagementPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const handleClickOutsideMenu = (event) => {
+      if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideMenu);
+    return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
+  }, []);
+
   // Fetch inventory items
   useEffect(() => {
     fetchItems()
-  }, [currentPage, searchTerm, statusFilter, dateRange])
+  }, [currentPage, searchTerm, dateRange])
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
   
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [dateRange]);
-
   async function fetchItems() {
 
     try {
       setError(null);
       setLoading(true);
 
-      let query = supabase
-        .from('users')
+      let query = await supabase
+        .from('opname')
         .select('*')
-        .order('user_id', { ascending: true });
+        .order('opname_id', { ascending: true });
 
-      if (statusFilter) {
-        query = query.ilike('user_role', statusFilter.toLowerCase());
-      }
+        
 
-      if (dateRange[0].startDate && dateRange[0].endDate) {
-        const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
-        const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
-        query = query.gte('created_at', start).lte('created_at', end);
-      }
+    // Apply date filter
+    if (dateRange[0].startDate && dateRange[0].endDate) {
+      const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
+      const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
+      query = query.gte('order_date', start).lte('order_date', end);
+    }
 
-      const { data, error: supabaseError } = await query;
-      if (supabaseError) throw supabaseError;
+    const { data, error: supabaseError } = await query;
+
+    if (supabaseError) throw supabaseError;
 
       // Apply search filter on the client side
-      const lowerSearch = searchTerm.toLowerCase();
-      const filteredData = data.filter(user =>
-        user.user_id.toString().includes(lowerSearch) ||
-        user.user_name?.toLowerCase().includes(lowerSearch) ||
-        user.user_email?.toLowerCase().includes(lowerSearch) ||
-        user.user_password?.toLowerCase().includes(lowerSearch) ||
-        user.user_role?.toLowerCase().includes(lowerSearch) ||
-        user.created_at?.toISOString() 
-      );
+    const lowerSearch = searchTerm.toLowerCase();
+    const filteredData = data.filter(product =>
+      product.product_id.toString().includes(lowerSearch) ||
+      product.product_name?.toLowerCase().includes(lowerSearch) ||
+      product.product_category?.toLowerCase().includes(lowerSearch)
+    );
       setFlattenedRows(filteredData);
 
     } catch (err) {
@@ -141,23 +142,23 @@ export default function AccountManagementPage() {
       }
     };
 
-    // const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
+//     const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
 
     const menuItems = [
       { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
       { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href:"/instock" },
-      { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product"},
+      { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
-      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
-      { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement", active: true },
+      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname", active: true },
+      { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
       ];
 
   // Add new item
   async function addItem(newItem) {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('opname')
         .insert([newItem])
         .select()
       
@@ -193,7 +194,7 @@ export default function AccountManagementPage() {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
             <div className="flex flex-col items-center space-y-6 mt-6">
               {menuItems.map((item, index) => (
                 <Link href={item.href} key={index}>
@@ -218,10 +219,10 @@ export default function AccountManagementPage() {
           {/* Content */}
           <div className="p-6">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">Accounts</h2>
-              <Link href="/addaccount">
+              <h2 className="text-2xl font-semibold text-black">Stock Opname</h2>
+              <Link href="/addproduct">
               <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg font-medium text-[16px] hover:bg-sky-700">
-                + Add Account
+                + Opname Stocks
               </button>
               </Link>
              
@@ -234,80 +235,13 @@ export default function AccountManagementPage() {
               <div className="relative w-[592px]">
                 <input
                   type="text"
-                  placeholder="Search by User ID, Name, or Email"
+                  placeholder="Search by Product ID, Item, or Category"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-full h-[40px] text-black"
                 />
                 <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
               </div>
-
-              {/* Right-side filters */}
-              <div className="flex gap-4 items-center">
-                {/* Date Range Picker Button */}
-                <div className="relative flex items-center gap-2">
-                  <button
-                    onClick={() => setShowDatePicker(!showDatePicker)}
-                    className="flex items-center gap-2 px-4 h-[44px] border rounded-md text-black bg-white pr-10"
-                  >
-                    <FiCalendar />
-                    {dateRange[0].startDate && dateRange[0].endDate
-                      ? `${format(dateRange[0].startDate, 'dd/MM/yyyy')} - ${format(dateRange[0].endDate, 'dd/MM/yyyy')}`
-                      : 'Select Date Range'}
-                  </button>
-
-                  {/* Clear Button - positioned absolutely */}
-                  {dateRange[0].startDate && dateRange[0].endDate && (
-                    <button
-                      onClick={() =>
-                        setDateRange([{
-                          startDate: null,
-                          endDate: null,
-                          key: 'selection'
-                        }])
-                      }
-                      className="absolute right-2 text-sm text-gray-500 hover:text-red-500"
-                      title="Clear Date Filter"
-                      style={{ marginLeft: '-24px' }}
-                    >
-                      ✕
-                    </button>
-                  )}
-
-                  {showDatePicker && (
-                    <div
-                      ref={datePickerRef}
-                      className="fixed top-24 right-10 z-50 bg-white shadow-lg border rounded-md p-4"
-                    >
-                      <div className="flex justify-end">
-                        <button
-                          onClick={() => setShowDatePicker(false)}
-                          className="text-gray-500 hover:text-red-500 text-sm font-bold"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <DateRange
-                        editableDateInputs={true}
-                        onChange={item => setDateRange([item.selection])}
-                        moveRangeOnFirstSelection={false}
-                        ranges={dateRange}
-                      />
-                    </div>
-                  )}
-                </div>  
-
-                  {/* Status Filter */}
-                  <select
-                    value={statusFilter}
-                    onChange={e => setStatusFilter(e.target.value)}
-                    className="px-4 h-[44px] border rounded-md text-black"
-                  >
-                    <option value="">Role</option>
-                    <option value="owner">Owner</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
             </div>
 
             {/* Table */}
@@ -315,10 +249,13 @@ export default function AccountManagementPage() {
               <table className="w-full border-[2px] border-gray-300 font-[Poppins]">
                 <thead>
                   <tr className="border-b-[2px] text-[16px] font-normal text-center">
-                  <th className="p-4">User ID</th>
-                  <th className="p-4">Username</th>
-                  <th className="p-4">Email</th>
-                  <th className="p-4">Role</th>
+                  <th className="p-4">Opname ID</th>
+                  <th className="p-4">Category</th>
+                  <th className="p-4">Items</th>
+                  <th className="p-4">Available Stock</th>
+                  <th className="p-4">Real Stock</th>
+                  <th className="p-4">Stock Difference</th>
+                  <th className="p-4">Opname By</th>
                   <th className="p-4">Created At</th>
                   <th className="p-4"></th>
                 </tr>
@@ -326,34 +263,40 @@ export default function AccountManagementPage() {
 
                 <tbody>
                   {paginatedRows.map((row, index) => (
-                    <tr key={row.user_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
-                      <td className="p-4">{row.user_id}</td>
+                    <tr key={row.opname_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
+                      <td className="p-4">{row.opname_id}</td>
+                      <td className="p-4">{row.product_category}</td>
+                      <td className="p-4">{row.product_name}</td>
+                      <td className="p-4">{row.product_quantity}</td>
+                      <td className="p-4">{row.opname_product.real_stock}</td>
+                      <td className="p-4">{row.opname_product.stock_difference}</td>
                       <td className="p-4">{row.user_name}</td>
-                      <td className="p-4">{row.user_email}</td>
-                      <td className="p-4">{row.user_role}</td>
-                      <td className="p-4">{row.created_at}</td>
+                      <td className="p-4">{row.opname_date}</td>
                       <td className="p-4 relative">
                         <button
-                          onClick={() => setOpenMenuId(openMenuId === row.user_id ? null : row.user_id)}
+                          onClick={() => setOpenMenuId(openMenuId === row.product_id ? null : row.product_id)}
                           className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white transition duration-150 ease-in-out"
                         >
                           <FiMoreVertical size={20} />
                         </button>
 
-                        {openMenuId === row.user_id && (
+                        {openMenuId === row.product_id && (
                           <div
                             className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
                             onClick={(e) => e.stopPropagation()} 
                           >
                             <Link
                               href={{
-                                pathname: '/editaccount',
+                                pathname: '/edit',
                                 query: {
-                                  user_id: row.user_id,
-                                  user_name: row.user_name,
-                                  user_email: row.user_email,
-                                  user_password: row.user_password,
-                                  user_role: row.user_role,
+                                  product_id: row.product_id,
+                                  product_name: row.product_name,
+                                  product_category: row.product_category,
+                                  purchase_price: row.purchase_price,
+                                  sale_price: row.sale_price,
+                                  product_quantity: row.product_quantity,
+                                  product_stockout: row.product_stockout,
+                                  product_overstock: row.product_overstock,
                                 }
                               }}
                               passHref
@@ -390,7 +333,7 @@ export default function AccountManagementPage() {
 
               <button
                 onClick={handleNextPage}
-                disabled={currentPage >= Math.ceil(flattenedRows.length / pageSize)}
+                  disabled={currentPage >= Math.ceil(flattenedRows.length / pageSize)}
                 className={`px-4 py-2 rounded ${currentPage * pageSize >= flattenedRows.length ? 'bg-gray-200 text-gray-500' : 'bg-gray-300'}`}
               >
                 Next

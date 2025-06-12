@@ -10,11 +10,12 @@ import {
   FaClipboardList,
   FaUser,
   FaTruck,
+  FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { DateRange } from 'react-date-range';
-import 'react-date-range/dist/styles.css'; 
-import 'react-date-range/dist/theme/default.css';
+// import 'react-date-range/dist/styles.css'; 
+// import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
 import { useRef } from 'react';
 
@@ -189,6 +190,7 @@ export default function StockPage() {
       { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product"},
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
+      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
     ];
 

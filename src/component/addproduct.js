@@ -10,6 +10,7 @@ import {
   FaClipboardList,
   FaUser,
   FaTruck,
+  FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 
@@ -22,6 +23,8 @@ export default function AddProduct() {
     purchasePrice: '',
     salePrice: '',
     totalItems: '',
+    stockout: '',
+    overstock: '',
   })
 
   const handleChange = (e) => {
@@ -29,28 +32,77 @@ export default function AddProduct() {
   };
 
   const handleSubmit = async () => {
-    const { productName, category, purchasePrice, salePrice, totalItems } = formData;
+    const { productName, category, purchasePrice, salePrice, totalItems, stockout, overstock } = formData;
 
     // 2. Validation
-    if (!productName || !category || !purchasePrice || !salePrice || !totalItems) {
-      alert('Please fill in all fields!');
+    if (
+      productName.trim() === '' ||
+      category.trim() === '' ||
+      purchasePrice.trim() === '' ||
+      salePrice.trim() === '' ||
+      totalItems.trim() === ''
+    ) {
+      alert('Please fill in all required fields!');
       return;
     }
 
+    if (
+      isNaN(parseFloat(purchasePrice)) ||
+      isNaN(parseFloat(salePrice)) ||
+      isNaN(parseInt(totalItems)) ||
+      (stockout !== null && stockout !== '' && isNaN(parseInt(stockout))) ||
+      (overstock !== null && overstock !== '' && isNaN(parseInt(overstock)))
+    ) {
+      alert('Ensure all number fields contain valid numeric values.');
+      return;
+    }
+
+    if (parseInt(totalItems) < 0 || parseInt(stockout) < 0 || parseInt(overstock) < 0) {
+    alert('Stock values cannot be negative.');
+    return;
+  }
+
+  if (parseInt(overstock) < parseInt(stockout)) {
+    alert('Overstock value cannot be less than Stockout value.');
+    return;
+  }
+
+    try {
+      const { data: existingProducts, error: checkError } = await supabase
+        .from('products')
+        .select('product_name')
+        .eq('product_name', productName.trim());
+
+      if (checkError) {
+        console.error("Error checking for duplicates:", checkError);
+        alert('Error checking for duplicate products. Please try again.');
+        return;
+      }
+
+      if (existingProducts && existingProducts.length > 0) {
+        alert(`Product "${productName}" already exists!`);
+        return;
+      }
+
     // 3. Send to Supabase
-    const { data, error } = await supabase.from('products').insert([
-      {
-        product_name: productName,
-        product_category: category,
-        purchase_price: parseFloat(purchasePrice),
-        sale_price: parseFloat(salePrice),
-        product_quantity: parseInt(totalItems),
-      },
-    ]).select();
+    const cleanData = {
+      product_name: productName.trim(),
+      product_category: category.trim(),
+      purchase_price: parseFloat(purchasePrice),
+      sale_price: parseFloat(salePrice),
+      product_quantity: parseInt(totalItems),
+      product_stockout: stockout !== '' ? parseInt(stockout) : null,
+      product_overstock: overstock !== '' ? parseInt(overstock) : null,
+    };
+
+    const { data, error } = await supabase
+    .from('products')
+    .insert([cleanData])
+    .select();
 
     if (error) {
-      console.error(error);
-      alert('Failed to save product!');
+      console.error("Supabase Insert Error:", error.message || error);
+      alert(`Failed to save product: ${error.message || 'Unknown error'}`);
     } else {
       alert('Product added successfully!');
       setFormData({
@@ -59,7 +111,13 @@ export default function AddProduct() {
         purchasePrice: '',
         salePrice: '',
         totalItems: '',
+        stockout: '',
+        overstock: '',
       });
+    }
+    }catch (err) {
+      console.error("Unexpected error:", err);
+      alert('An unexpected error occurred. Please try again.');
     }
   };
 
@@ -69,15 +127,18 @@ export default function AddProduct() {
     { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product", active: true  },
     { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
     { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
+    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
     { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
   ];
 
   const fields = [
-    { label: "Product Name", name: "productName" },
+    { label: "Items", name: "productName" },
     { label: "Category", name: "category" },
     { label: "Purchase Price", name: "purchasePrice" },
     { label: "Sale Price", name: "salePrice" },
-    { label: "Total Items", name: "totalItems" },
+    { label: "Quantity", name: "totalItems" },
+    { label: "Stockout Limit", name: "stockout" },
+    { label: "Overstock Limit", name: "overstock" },
   ];
 
   return (
@@ -103,7 +164,7 @@ export default function AddProduct() {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
             <div className="flex flex-col items-center space-y-6 mt-6">
               {menuItems.map((item, index) => (
                 <Link href={item.href} key={index}>

@@ -4,35 +4,45 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
 import { supabase } from '@/lib/supabase';
+import bcrypt from 'bcryptjs';
 import { FiMenu, FiBell } from "react-icons/fi";
 import {
   FaChartBar,
   FaBoxOpen,
   FaClipboardList,
   FaUser,
-  FaTruck,
   FaClipboardCheck,
+  FaTruck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
+import { useRouter } from 'next/navigation'
 
-export default function EditSupplierPage() {
+export default function EditAccountPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const [formData, setFormData] = useState({
-    supplierName: '',
-    address : '',
-    phoneNumber : '',
+    userName: '',
+    email: '',
+    password: '',
+    role: '',
   });
 
-  const supplier_id = searchParams.get('supplier_id');
+  const user_id = searchParams.get('user_id');
+
+  useEffect(() => {
+    const role = localStorage.getItem('user_role')
+    if (role !== 'admin' && role !== 'owner') {
+      router.push('/unauthorized')
+    }
+  }, [])
 
   useEffect(() => {
     setFormData({
-      supplierName: searchParams.get('supplier_name') || '',
-      address: searchParams.get('supplier_address') || '',
-      phoneNumber: searchParams.get('supplier_phone') || '',
+      userName: searchParams.get('user_name') || '',
+      email: searchParams.get('user_email') || '',
+      password: '',
+      role: searchParams.get('user_role') || '',
     });
   }, [searchParams]);
 
@@ -41,46 +51,53 @@ export default function EditSupplierPage() {
   };
 
   const handleUpdate = async () => {
-    const { supplierName, address, phoneNumber } = formData;
+    const { userName, email, password, role } = formData;
 
-    if (!supplierName || !address || !phoneNumber) {
+    if (!userName || !email || !role) {
       alert("Please fill in all fields!");
       return;
     }
 
+    let updateData = {
+      user_name: userName,
+      user_email: email,
+      user_role: role,
+    };
+
+    if (password) {
+      const hashedPassword = bcrypt.hashSync(password, 10);
+      updateData.user_password = hashedPassword;
+    }
+
     const { error } = await supabase
-      .from("suppliers")
-      .update({
-        supplier_name: supplierName,
-        supplier_address : address,
-        supplier_phone: phoneNumber,
-      })
-      .eq("supplier_id", supplier_id);
+      .from("users")
+      .update(updateData)
+      .eq("user_id", user_id);
 
     if (error) {
       console.error(error);
-      alert("Failed to update supplier data!");
+      alert("Failed to update user!");
     } else {
-      alert("Supplier updated successfully!");
-      router.push("/supplier");
+      alert("User updated successfully!");
+      router.push("/accountmanagement");
     }
   };
 
   const handleDelete = async () => {
-    const confirmDelete = confirm("Are you sure you want to delete this supplier?");
+    const confirmDelete = confirm("Are you sure you want to delete this user?");
     if (!confirmDelete) return;
 
     const { error } = await supabase
-      .from("suppliers")
+      .from("users")
       .delete()
-      .eq("supplier_id", supplier_id);
+      .eq("user_id", user_id);
 
     if (error) {
       console.error(error);
-      alert("Failed to delete supplier!");
+      alert("Failed to delete user!");
     } else {
-      alert("Supplier deleted successfully!");
-      router.push("/supplier");
+      alert("User deleted successfully!");
+      router.push("/accountmanagement");
     }
   };
 
@@ -89,15 +106,16 @@ export default function EditSupplierPage() {
     { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href: "/instock" },
     { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product" },
     { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order" },
-    { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier", active: true },
+    { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier" },
     { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
-    { icon: <FaUser size={24} />, label: "Account Management", href: "/accountmanagement" },
+    { icon: <FaUser size={24} />, label: "Account Management", href: "/accountmanagement", active: true },
   ];
 
   const fields = [
-    { label: "Supplier", name: "supplierName" },
-    { label: "Address", name: "address" },
-    { label: "Phone Number", name: "phoneNumber" },
+    { label: "Username", name: "userName" },
+    { label: "Email", name: "email" },
+    { label: "Password", name: "password" },
+    { label: "Role", name: "role" },
   ];
 
   return (
@@ -144,32 +162,72 @@ export default function EditSupplierPage() {
         {/* Main Content */}
         <div className="flex-1 bg-white p-12">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Change Supplier Detail</h2>
-            <Link href="/product">
+            <h2 className="text-2xl font-semibold">Change Account Detail</h2>
+            <Link href="/accountmanagement">
               <button className="text-2xl font-semibold hover:text-sky-700">×</button>
             </Link>
           </div>
 
           <div className="text-lg mb-8 font-semibold text-black">
-            Supplier ID <span className="text-gray-800 font-medium flex items-center gap-12">#{supplier_id}</span>
+            User ID <span className="text-gray-800 font-medium flex items-center gap-12">#{user_id}</span>
           </div>
 
           <div className="space-y-6">
-            {fields.map((field, idx) => (
-              <div key={idx} className="flex items-center gap-12">
-                <label className="w-[150px] text-base font-semibold text-black">
-                  {field.label}
-                </label>
+            {/* Username */}
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Username</label>
+              <input
+                type="text"
+                name="userName"
+                value={formData.userName}
+                onChange={handleChange}
+                className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
+                placeholder="Username"
+              />
+            </div>
+
+            {/* Email */}
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Email</label>
+              <input
+                type="text"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
+                placeholder="Email"
+              />
+            </div>
+
+            {/* Password */}
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Password</label>
+              <div className="flex items-center gap-2 relative">
                 <input
-                  type="text"
-                  name={field.name}
-                  value={formData[field.name]}
+                  type="password"
+                  name="password"
+                  value={formData.password}
                   onChange={handleChange}
                   className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
-                  placeholder={field.label}
+                  placeholder="Leave blank to keep current password"
                 />
               </div>
-            ))}
+            </div>
+
+            {/* Role Dropdown */}
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Role</label>
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
+              >
+                <option value="">Select Role</option>
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
+              </select>
+            </div>
           </div>
 
           <div className="mt-12 flex justify-between w-[600px]">

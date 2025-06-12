@@ -1,7 +1,7 @@
 // src/app/addstock/page.js
 
-import AddProduct from '../../component/addproduct';  // Pastikan pathnya benar
+import AddProduct from '../../component/addproduct';
 
 export default function AddProductPage() {
-  return <AddProduct />;  // Render komponen AddStock
+  return <AddProduct />; 
 }

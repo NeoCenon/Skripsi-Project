@@ -10,12 +10,13 @@ import {
   FaClipboardList,
   FaUser,
   FaTruck,
+  FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 
 export default function AddOrder() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
+  
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -26,7 +27,8 @@ export default function AddOrder() {
       productId: '', 
       quantity: '',
       availableStock: null,
-    }], // dynamic list of products
+      stockoutThreshold: null,
+    }],
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -64,28 +66,63 @@ export default function AddOrder() {
     return;
   }
 
-  const hasInvalidStock = orderData.products.some(p => 
-    p.availableStock !== null && parseInt(p.quantity) > p.availableStock
-  );
+  const hasInvalidStock = orderData.products.some(p => {
+    const quantity = parseInt(p.quantity);
+    const availableStock = p.availableStock;
+    const stockoutThreshold = p.stockoutThreshold;
+
+  if (isNaN(quantity)) return true;
+    if (quantity <= 0) return true;
+    if (availableStock === null) return true;
+    
+    // Must not exceed available stock
+    if (quantity > availableStock) return true;
+
+    // Stockout limit validation (only if stockoutThreshold exists)
+    if (stockoutThreshold !== null) {
+      const remainingStock = availableStock - quantity;
+      if (remainingStock < stockoutThreshold) return true;
+    }
+
+    return false;
+  });
 
   if (hasInvalidStock) {
-    alert("One or more products exceed available stock.");
+    alert("Please check the quantity limits for your products");
     setSubmitting(false);
     return;
   }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const userId = userData?.user?.id || null;
+  console.log('User ID:', userId);
+  if (userError) {
+    console.error('User Fetch Error:', userError);
+    alert("Failed to fetch user data!");
+    setSubmitting(false);
+    return;
+  } 
+
+  if (!userId) {
+    alert("User not authenticated!");
+    setSubmitting(false);
+    return;
+  }
+
 
   // Insert into order table
     const { data: orderInsert, error: orderError } = await supabase
       .from("orders")
       .insert([{ 
         order_destination: orderData.destination, 
-        order_status: "pending" 
+        order_status: "pending",
+        user_id: userId, // Link to authenticated user
       }])
       .select()
 
     if (orderError || !orderInsert) {
       alert("Failed to create order!");
-      console.error('Order Insert Error:' + orderError);
+      console.error('Order Insert Error:', orderError);
       setSubmitting(false);
       return;
       
@@ -117,15 +154,22 @@ export default function AddOrder() {
           products: [{ 
             productId: '', 
             quantity: '', 
-            availableStock: null
+            availableStock: null,
+            stockoutThreshold: null,
           }]
         })
       };
     setSubmitting(false);
   }
   
+  
 
   const handleProductChange = async(index, field, value) => {
+  // Prevent negative quantities
+  if (field === 'quantity' && value !== '' && parseInt(value) < 0) {
+    return;
+  }
+  
   const updated = [...orderData.products];
   updated[index][field] = value;
   
@@ -133,18 +177,16 @@ export default function AddOrder() {
   if (field === 'productId') {
     const { data, error } = await supabase
       .from('products')
-      .select('product_quantity')
+      .select('product_quantity, product_stockout')
       .eq('product_id', value)
       .single();
 
     if (!error && data) {
       updated[index].availableStock = data.product_quantity;
+      updated[index].stockoutThreshold = data.product_stockout;
+    } else {
+      console.error('Error fetching product:', error);
     }
-  }
-
-  // If quantity is manually filled, clear availableStock
-  if (field === 'quantity' && value !== '') {
-    updated[index].availableStock = null;
   }
    
   setOrderData({ ...orderData, products: updated });
@@ -168,6 +210,7 @@ export default function AddOrder() {
     { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
     { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order", active: true  },
     { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
+    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
     { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
   ];
 
@@ -194,7 +237,7 @@ export default function AddOrder() {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
             <div className="flex flex-col items-center space-y-6 mt-6">
               {menuItems.map((item, index) => (
                 <Link href={item.href} key={index}>
@@ -218,7 +261,7 @@ export default function AddOrder() {
         {/* Main Content */}
         <div className="flex-1 bg-white p-12">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Add Product</h2>
+            <h2 className="text-2xl font-semibold">Add Order</h2>
             <Link href='/order'>
               <button className="text-2xl font-semibold hover:text-sky-700">×</button>
             </Link>
@@ -259,17 +302,29 @@ export default function AddOrder() {
                     <label className="text-sm font-semibold text-black mb-1">Quantity</label>
                     <input
                       type="number"
+                      min="0"
                       placeholder={
                         item.availableStock !== null
-                          ? `Available: ${item.availableStock}`
-                          : "Qty"
+                          ? item.stockoutThreshold !== null
+                            ? `Available: ${item.availableStock} (Max order: ${item.availableStock - item.stockoutThreshold})`
+                            : `Available: ${item.availableStock}`
+                          : "Enter quantity"
                       }
                       value={item.quantity || ""}
-                      onChange={(e) =>
-                        handleProductChange(index, 'quantity', e.target.value)
-                      }
+                      onChange={(e) => {
+                        const value = e.target.value;
+                          // Only update if value is empty or a positive number
+                          if (value === "" || parseInt(value) >= 0) {
+                            handleProductChange(index, 'quantity', value);
+                          }
+                        }}
                       className="border border-black rounded-[12px] h-[42px] px-4 text-black outline-none"
                     />
+                    {item.availableStock !== null && item.stockoutThreshold !== null && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Stockout protection: {item.stockoutThreshold} units must remain
+                      </p>
+                    )}
                   </div>
 
                   <button

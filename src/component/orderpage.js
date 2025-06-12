@@ -10,6 +10,7 @@ import {
   FaClipboardList,
   FaUser,
   FaTruck,
+  FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { DateRange } from 'react-date-range';
@@ -17,20 +18,21 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
 import { useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function ProductPage() {
   const [items, setItems] = useState([])
+  const [flattenedRows, setFlattenedRows] = useState([]);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null);
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
-
   const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 5;
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState('');
-
   const [dateRange, setDateRange] = useState([
     {
       startDate: null,
@@ -40,128 +42,169 @@ export default function ProductPage() {
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const datePickerRef = useRef();
-  const [flattenedRows, setFlattenedRows] = useState([]);
+  
   const paginatedRows = flattenedRows.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
+  // Fetch user
   useEffect(() => {
-    function handleClickOutsideGlobal(event) {
-      const menuButtons = document.querySelectorAll('.menu-button');
-      const isClickOnButton = [...menuButtons].some(btn => btn.contains(event.target));
-
-      const menuPopups = document.querySelectorAll('.menu-popup');
-      const isClickOnPopup = [...menuPopups].some(popup => popup.contains(event.target));
-
-      if (!isClickOnButton && !isClickOnPopup) {
-        setOpenMenuIndex(null);
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Failed to get user:", error.message);
+        return;
       }
-    }
-
-    document.addEventListener('mousedown', handleClickOutsideGlobal);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutsideGlobal);
+      setUser(user);
     };
+    getUser();
+    
   }, []);
+  console.log('Fetched user:', user);
+
+  // Fetch products when user or filters change
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, statusFilter, currentPage, dateRange]);
+
+  // useEffect(() => {
+  //   function handleClickOutsideGlobal(event) {
+  //     const menuButtons = document.querySelectorAll('.menu-button');
+  //     const isClickOnButton = [...menuButtons].some(btn => btn.contains(event.target));
+
+  //     const menuPopups = document.querySelectorAll('.menu-popup');
+  //     const isClickOnPopup = [...menuPopups].some(popup => popup.contains(event.target));
+
+  //     if (!isClickOnButton && !isClickOnPopup) {
+  //       setOpenMenuIndex(null);
+  //     }
+  //   }
+
+  //   document.addEventListener('mousedown', handleClickOutsideGlobal);
+  //   return () => {
+  //     document.removeEventListener('mousedown', handleClickOutsideGlobal);
+  //   };
+  // }, []);
 
 
   useEffect(() => {
-    function handleClickOutside(event) {
+    const handleClickOutside = (event) => {
       if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
         setShowDatePicker(false);
       }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
     };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
+    const handleClickOutsideMenu = (event) => {
+      if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
+        setOpenMenuIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideMenu);
+    return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
+  }, []);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [dateRange]);
-
-  // Fetch inventory items
-  useEffect(() => {
-    fetchItems()
-  }, [currentPage, searchTerm, statusFilter, dateRange])
+  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+  useEffect(() => { setCurrentPage(1); }, [statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [dateRange]);
 
   async function fetchItems() {
+  if (!user) return;
 
-    try {
-      setError(null);
-      setLoading(true);
+  try {
+    setError(null);
+    setLoading(true);
+    console.log('Inside try block');
 
-      let query = supabase
-        .from('orders')
-        .select(`
+    const { data, error: supabaseError } = await supabase 
+      .from('order_product')
+      .select(`
+        order_product_id,
+        product_quantity,
+        orders (
           order_id,
           order_date,
           order_destination,
           order_status,
-          order_product (
-            product_quantity,
-            product:products (
-              product_name,
-              product_category
-            )
-          )
-        `);
+          user_id
+        ),
+        products (
+          product_id,
+          product_name,
+          product_category
+        )
+      `)
+      .order('order_product_id', { ascending: true });
+      console.log(data, error);
 
-        // Apply status filter
+      if (supabaseError){
+        console.error("Supabase fetch error:", supabaseError);
+        throw supabaseError;
+      } 
+
+    const filteredData = (data || []).filter(item => item.orders?.user_id === user.id);
+
+    // let filteredRows = filteredData;
+    const userOrders = (data || []).filter(item => item.orders?.user_id === user.id);
+    let filtered = userOrders;
+    console.log("Filtered orders after all filters:", filtered);
+
+    // Status filter
     if (statusFilter) {
-      query = query.ilike('order_status', statusFilter.toLowerCase());
-    }
-
-    // Apply date filter
-    if (dateRange[0].startDate && dateRange[0].endDate) {
-      const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
-      const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
-      query = query.gte('order_date', start).lte('order_date', end);
-    }
-
-    const { data, error: supabaseError } = await query;
-      if (supabaseError) throw supabaseError;
-
-      // Apply search filter on the client side
-      const lowerSearch = searchTerm.toLowerCase();
-      const allRows = data.flatMap(order =>
-        order.order_product
-          .filter(productItem =>
-            order.order_id.toString().includes(searchTerm) ||
-            productItem.product?.product_name?.toLowerCase().includes(lowerSearch) ||
-            productItem.product?.product_category?.toLowerCase().includes(lowerSearch)
-          )
-          .map(productItem => ({
-            order_id: order.order_id,
-            order_date: order.order_date,
-            order_destination: order.order_destination,
-            order_status: order.order_status,
-            product_quantity: productItem.product_quantity,
-            product_name: productItem.product?.product_name,
-            product_category: productItem.product?.product_category
-          }))
+      filtered = filtered.filter(item =>
+        item.orders?.order_status?.toLowerCase() === statusFilter.toLowerCase()
       );
-      const sortedRows = allRows.sort((a, b) => a.order_id - b.order_id);
-      setFlattenedRows(sortedRows);
+    }
 
-    } catch (err) {
-      setError(err.message);
-      console.error('Error:', err);
-    } finally {
-      setLoading(false);
+    // Date filter
+    if (dateRange[0].startDate && dateRange[0].endDate) {
+      const start = new Date(dateRange[0].startDate);
+      const end = new Date(dateRange[0].endDate);
+      filtered = filtered.filter(item => {
+        const orderDate = new Date(item.orders?.order_date);
+        return orderDate >= start && orderDate <= end;
+      });
     }
+
+    // Search filter
+    // const lowerSearch = searchTerm.toLowerCase();
+    if (searchTerm.trim()) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.orders?.order_id?.toString().includes(search) ||
+        item.products?.product_name?.toLowerCase().includes(search) ||
+        item.products?.product_category?.toLowerCase().includes(search)
+      );
     }
+
+    const flattened = filtered.map(item => ({
+      order_product_id: item.order_product_id,
+      order_id: item.orders?.order_id,
+      order_date: item.orders?.order_date,
+      order_destination: item.orders?.order_destination,
+      order_status: item.orders?.order_status,
+      product_quantity: item.product_quantity,
+      product_name: item.products?.product_name,
+      product_category: item.products?.product_category,
+    }));
+
+    const sorted = flattened.sort((a, b) => b.order_id - a.order_id);
+
+    setFlattenedRows(sorted);
+    setItems(filtered); // optional, in case you want full detail
+    
+  } catch (err) {
+    console.error('Error fetching orders:', err.message);
+    setError('Failed to load orders');
+  } finally {
+    setLoading(false);
+  }
+}
+
 
     const handleNextPage = () => {
       setCurrentPage(prevPage => prevPage + 1);
@@ -173,7 +216,7 @@ export default function ProductPage() {
       }
     };
 
-    const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
+    const totalDisplayedRows = flattenedRows.length;
 
     const menuItems = [
       { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
@@ -181,22 +224,9 @@ export default function ProductPage() {
       { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order", active: true },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
+      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
     ];
-
-    async function addItem(newItem) {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([newItem])
-        .select()
-      
-      if (error) throw error
-      setItems([...items, ...data])
-    } catch (error) {
-      console.error('Error adding item:', error)
-    }
-  }
 
   return (
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
@@ -204,18 +234,16 @@ export default function ProductPage() {
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
         <div className="flex items-center gap-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
+            <FiMenu size={24} />
           </button>
-          <h1 className="text-xl font-semibold text-black">
-            <span className="text-black">E-</span>Inventoria
-          </h1>
+          <h1 className="text-xl font-semibold"><span>E-</span>Inventoria</h1>
         </div>
 
         <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
+          <FiBell size={20} />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
+            <span>Admin ▾</span>
           </div>
         </div>
       </div>
@@ -223,7 +251,7 @@ export default function ProductPage() {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
             <div className="flex flex-col items-center space-y-6 mt-6">
               {menuItems.map((item, index) => (
                 <Link href={item.href} key={index}>
@@ -246,17 +274,17 @@ export default function ProductPage() {
         <div className="flex-1 flex flex-col bg-white"> 
 
           {/* Content */}
-          <div className="p-6">
+          <div className="flex-1 flex flex-col bg-white p-6">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">Orders</h2>
+            <h2 className="text-2xl font-semibold">Orders</h2>
               <Link href="/addorder">
-              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg font-medium text-[16px] hover:bg-sky-700">
+              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
                 + Add Order
               </button>
               </Link>
             </div>
 
-            <div className="border-b mb-4"></div>
+            <div className="mb-4 border-b"></div>
 
             {/* Search & Filter */}
             <div className="flex justify-between items-center mb-6">
@@ -266,7 +294,7 @@ export default function ProductPage() {
                   placeholder="Search by Order ID, Item, or Category"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-full h-[40px] text-black"
+                  className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-full text-black"
                 />
                 <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
               </div>
@@ -340,56 +368,63 @@ export default function ProductPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg overflow-hiddenvisible mt-6 relative">
-              <table className="w-full border-[2px] border-gray-300 font-[Poppins] overflow-visible relative">
+            {loading ? (
+              <div>Loading...</div>
+            ) : error ? (
+              <div className="text-red-500">{error}</div>
+            ) : (
+            <div className="bg-white rounded-lg overflow-visible mt-6 relative">
+              <table className="w-full border border-gray-300">
                 <thead>
-                  <tr className="border-b-[2px] text-[16px] font-normal text-center">
-                  <th className="p-4">Order ID</th>
-                  <th className="p-4">Date</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4">Items</th>
-                  <th className="p-4">Destination Address</th>
-                  <th className="p-4">Quantity</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4"></th>
-                </tr>
+                  <tr className="border-b text-center text-sm font-medium">
+                    <th className="p-4">Order ID</th>
+                    <th className="p-4">Created At</th>
+                    <th className="p-4">Category</th>
+                    <th className="p-4">Items</th>
+                    <th className="p-4">Destination Address</th>
+                    <th className="p-4">Quantity</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4"></th>
+                  </tr>
                 </thead>
 
-                <tbody className="relative overflow-visible">
+                <tbody className="relative text-center overflow-visible">
                   {paginatedRows.map((row, index) => (
-                    <tr key={`${row.order_id}-${row.product_name}-${index}`} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
-                      <td className="p-4">{row.order_id}</td>
-                      <td className="p-4">{row.order_date}</td>
-                      <td className="p-4">{row.product_category}</td>
-                      <td className="p-4">{row.product_name}</td>
-                      <td className="p-4">{row.order_destination}</td>
-                      <td className="p-4">{row.product_quantity}</td>
-                      <td className="p-4">{row.order_status}</td>
+                    <tr key={index}>
+                      <td className="px-4 py-2">{row.order_id}</td>
+                      <td className="px-4 py-2">{format(new Date(row.order_date), 'dd/MM/yyyy')}</td>
+                      <td className="px-4 py-2">{row.product_category}</td>
+                      <td className="px-4 py-2">{row.product_name}</td>
+                      <td className="px-4 py-2">{row.order_destination}</td>
+                      <td className="px-4 py-2">{row.product_quantity}</td>
+                      <td className="px-4 py-2">{row.order_status}</td>
                       <td className="p-4 relative">
                         <button
                             onClick={(e) => {
                               e.stopPropagation(); // Prevent document click handler from firing
                               setOpenMenuIndex(openMenuIndex === index ? null : index);
                             }}
-                            className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white transition duration-150 ease-in-out"
+                            className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white"
                           >
                           <FiMoreVertical size={20} />
                         </button>
 
                         {openMenuIndex === index && (
                           <div
-                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
+                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
                             onClick={(e) => e.stopPropagation()} 
                           >
-                            <Link
+                            {/* <Link
                               href={{
                                 pathname: '/editorder',
                                 query: {
+                                  order_product_id: row.order_product_id,
                                   order_id: row.order_id,
                                   product_name: row.product_name,
                                   product_category: row.product_category,
                                   order_destination: row.order_destination,
                                   product_quantity: row.product_quantity,
+                                  order_date: row.order_date,
                                   order_status: row.order_status,
                                 }
                               }}
@@ -399,11 +434,22 @@ export default function ProductPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                 }}
-                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
+                                className="px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
                               >
                                 Edit
                               </div>
-                            </Link>
+                            </Link> */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/editorder?order_id=${row.order_id}&order_product_id=${row.order_product_id}`
+                                );
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                              Edit
+                            </button>
                           </div>
                         )}
                       </td>
@@ -411,7 +457,9 @@ export default function ProductPage() {
                   ))}
                 </tbody>
               </table>
+              {/* <pre>{JSON.stringify(paginatedRows, null, 2)}</pre> */}
             </div>
+            )}
 
             {/* Pagination Controls */}
             <div className="flex justify-between items-center mt-4">

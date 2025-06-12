@@ -10,9 +10,11 @@ import {
   FaBoxOpen,
   FaClipboardList,
   FaTruck,
+  FaClipboardCheck,
   FaUser,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
+import { useRouter } from 'next/navigation'
 
 export default function AddAccount() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -72,6 +74,7 @@ export default function AddAccount() {
       { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order"  },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
+      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement", active: true },
   ];
 
@@ -81,6 +84,15 @@ export default function AddAccount() {
     { label: "Password", name: "password" },
     { label: "Role", name: "role" },
   ];
+
+  const router = useRouter()
+  
+    useEffect(() => {
+      const role = localStorage.getItem('user_role')
+      if (role !== 'admin' && role !== 'owner') {
+        router.push('/unauthorized')
+      }
+    }, [])
 
   return (
     <div className="flex flex-col h-screen bg-white text-black font-[Poppins]">
