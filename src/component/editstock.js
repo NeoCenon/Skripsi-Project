@@ -212,7 +212,7 @@ export default function EditInstockPage() {
       // 1. Fetch current product quantity
       const { data: productData, error: productError } = await supabase
       .from("products")
-      .select("product_quantity, product_overstock")
+      .select("product_quantity")
       .eq("product_id", productId)
       .single();
 
@@ -263,21 +263,6 @@ export default function EditInstockPage() {
       alert("Instock deleted and product quantity restored.");
       router.push("/instock");
       };
-
-      
-      // const { error: instockError } = await supabase
-      //       .from("instocks")
-      //       .delete()
-      //       .eq("instock_id", instock_id);
-
-      //  if (instockError || instockProductError) {
-      //       console.error(instockError || instockProductError);
-      //       alert("Failed to delete instock.");
-      // } else {
-      //       alert("Instock deleted and product quantity restored.");
-      //       router.push("/instock");
-      // }
-      // };
 
       const fields = [
             { label: "Items", name: "productName", readOnly: true },

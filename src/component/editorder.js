@@ -137,14 +137,23 @@ export default function EditOrderPage() {
       return;
       }
 
-      const maxAllowedQty = productData.product_stockout ?? productData.product_quantity;
+      const stockout = productData.product_stockout ?? Infinity;
+      const newProductQty = productData.product_quantity + initialQuantity - updatedQty;
 
-      if (updatedQty > maxAllowedQty) {
-      alert(`Quantity exceeds stock limit (${maxAllowedQty}).`);
+      if (newProductQty < stockout) {
+      alert(`Stock would drop below the stockout threshold of ${stockout}.`);
       return;
       }
 
-      const quantityDelta = updatedQty - initialQuantity;
+      const { error: updateProductError } = await supabase
+      .from("products")
+      .update({ product_quantity: newProductQty })
+      .eq("product_id", productId);
+
+      if (updateProductError) {
+      console.error("Failed to update product quantity:", updateProductError);
+      return;
+      }
 
       // Update orders table
       const { error: orderError } = await supabase
@@ -165,16 +174,6 @@ export default function EditOrderPage() {
             .update({product_quantity: updatedQty})
             .eq("order_product_id", order_product_id);
 
-      if (orderProductError) {
-            console.error("order_product update failed:", orderProductError);
-      }
-
-      // const { error: stockError } = await supabase.rpc("adjust_product_quantity", {
-      // p_product_id: productId,
-      // p_quantity_delta: quantityDelta * -1, // decrease stock
-      // });
-
-
       if (orderError || orderProductError) {
             alert("Failed to update order!");
       } else {
@@ -186,24 +185,82 @@ export default function EditOrderPage() {
       const handleDelete = async () => {
       if (!confirm("Are you sure you want to delete this order?")) return;
 
-      const { error: productError } = await supabase
-            .from("order_product")
-            .delete()
-            .eq("order_id", order_id);
-
-      const { error: orderError } = await supabase
-            .from("orders")
-            .delete()
-            .eq("order_id", order_id);
-
-      if (orderError || productError) {
-            console.error(orderError || productError);
-            alert("Failed to delete order!");
-      } else {
-            alert("Order deleted successfully!");
-            router.push("/order");
+      if (!productId || !order_product_id || !initialQuantity) {
+            alert("Missing required data for deletion.");
+            return;
       }
+
+      // 1. Fetch current product quantity
+      const { data: productData, error: productError } = await supabase
+      .from("products")
+      .select("product_quantity")
+      .eq("product_id", productId)
+      .single();
+
+      if (productError || !productData) {
+      console.error("Failed to fetch product quantity before delete:", productError);
+      alert("Failed to retrieve product info.");
+      return;
+      }
+
+      // 2. Restore product quantity
+      const restoredQty = productData.product_quantity + initialQuantity;
+
+      const { error: productUpdateError } = await supabase
+      .from("products")
+      .update({ product_quantity: restoredQty })
+      .eq("product_id", productId);
+
+      if (productUpdateError) {
+      console.error("Failed to restore product quantity:", productUpdateError);
+      alert("Failed to delete order.");
+      return;
+      }
+
+      // 3. Delete order_product
+      const { error: orderProductError } = await supabase
+      .from("order_product")
+      .delete()
+      .eq("order_product_id", order_product_id);
+
+      // Step 3: Check if any instock_product rows remain with this instock_id
+      const { data: remaining, error: remainingError } = await supabase
+      .from("order_product")
+      .select("order_product_id")
+      .eq("order_id", order_id);
+
+      if (!remainingError && remaining.length === 0) {
+      // Delete the instocks row if no associated instock_product left
+      const { error: orderDeleteError } = await supabase
+            .from("orderks")
+            .delete()
+            .eq("order_id", order_id);
+
+      if (orderDeleteError) {
+            console.error("Failed to delete orders:", orderDeleteError);
+      }
+      }
+
+      alert("Order deleted and product quantity restored.");
+      router.push("/order");
       };
+      // const { error: productError } = await supabase
+      //       .from("order_product")
+      //       .delete()
+      //       .eq("order_id", order_id);
+
+      // const { error: orderError } = await supabase
+      //       .from("orders")
+      //       .delete()
+      //       .eq("order_id", order_id);
+
+      // if (orderError || productError) {
+      //       console.error(orderError || productError);
+      //       alert("Failed to delete order!");
+      // } else {
+      //       alert("Order deleted successfully!");
+      //       router.push("/order");
+      // }
 
       const fields = [
             { label: "Items", name: "productName", readOnly: true },
