@@ -155,8 +155,9 @@ export default function AddSupplier() {
               <button className="text-2xl font-semibold hover:text-sky-700">×
               </button>
             </Link>
-            
           </div>
+
+          <div className="h-14" />
 
           <div className="space-y-6">
             {fields.map((field, idx) => (

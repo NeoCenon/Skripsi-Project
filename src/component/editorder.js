@@ -244,23 +244,6 @@ export default function EditOrderPage() {
       alert("Order deleted and product quantity restored.");
       router.push("/order");
       };
-      // const { error: productError } = await supabase
-      //       .from("order_product")
-      //       .delete()
-      //       .eq("order_id", order_id);
-
-      // const { error: orderError } = await supabase
-      //       .from("orders")
-      //       .delete()
-      //       .eq("order_id", order_id);
-
-      // if (orderError || productError) {
-      //       console.error(orderError || productError);
-      //       alert("Failed to delete order!");
-      // } else {
-      //       alert("Order deleted successfully!");
-      //       router.push("/order");
-      // }
 
       const fields = [
             { label: "Items", name: "productName", readOnly: true },

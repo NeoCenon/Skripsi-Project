@@ -1,18 +1,19 @@
-import { useAuth } from '../context/authcontext'
-import { useRouter } from 'next/router'
+"use client"
 
-export default function LogoutButton() {
-  const { signOut } = useAuth()
-  const router = useRouter()
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
-  const handleLogout = async () => {
-    await signOut()
-    router.push('/login')
-  }
+export default function Logout() {
+  const router = useRouter();
 
-  return (
-    <button onClick={handleLogout}>
-      Logout
-    </button>
-  )
+  useEffect(() => {
+    const logout = async () => {
+      await supabase.auth.signOut();
+      router.push("/login"); // redirect to login
+    };
+    logout();
+  }, [router]);
+
+  return <p>Logging out...</p>;
 }

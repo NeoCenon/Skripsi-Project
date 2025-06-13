@@ -17,19 +17,22 @@ import { useRouter } from 'next/navigation'
 
 export default function OpnamePage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const router = useRouter();
 
-  const [userId, setUserId] = useState(null); // Add state for user ID
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
-  // Fetch current user when component mounts
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
-    };
-    fetchUser();
-  }, []);
+  const [opnameData, setOpnameData] = useState({
+    products: [{ 
+      productId: '', 
+      quantity: '', 
+    }], // dynamic list of products
+  });
+
+  const [submitting, setSubmitting] = useState(false);
+
+  const [productOptions, setProductOptions] = useState([]);
 
   const menuItems = [
     { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
@@ -50,8 +53,6 @@ export default function OpnamePage() {
     physicalQuantity: "",
     differentStock: "",
   });
-
-  const router = useRouter();
   
     useEffect(() => {
       const role = localStorage.getItem('user_role')
@@ -86,12 +87,11 @@ export default function OpnamePage() {
     });
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
   const calculateDifference = async () => {
-    if (!userId) {
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+    
+    if (userError || !userId) {
       alert("User not authenticated. Please log in.");
       return;
     }
@@ -101,40 +101,21 @@ export default function OpnamePage() {
     const diff = physicalQty - recordedQty;
 
     setFormData({ ...formData, differentStock: diff });
-    // const diff =
-    //   parseInt(formData.physicalQuantity || 0) -
-    //   parseInt(formData.quantity || 0);
-    // setFormData({ ...formData, differentStock: diff });
   
     try {
-      // 1. Insert into opname table
-      const { data: opnameData, error: opnameError } = await supabase
-        .from("opname")
-        .insert([{ 
-          user_id: 1, 
-          opname_date: new Date().toISOString() 
-        }]) // Change `user_id` as needed
+      // 1. Insert into `opname`
+      const { data: opnameInsert, error: opnameError } = await supabase
+        .from("opnames")
+        .insert([{ user_id: userId, opname_date: new Date().toISOString() }])
         .select()
         .single();
-      console.log(opnameData);
 
-      if (opnameError) {
-        console.error("Error inserting opname:", opnameError);
-        throw opnameError;
-      }
+      if (opnameError) throw opnameError;
 
-      if (!formData.productId) {
-        alert("Please select a product first.");
-        return;
-      }
-
-      const opname_id = opnameData.opname_id;
-
-      // 2. Insert into opname_product table
       const { error: opnameProductError } = await supabase
         .from("opname_product")
         .insert([{
-          opname_id,
+          opname_id: opnameInsert.opname_id,
           product_id: formData.productId,
           real_stock: physicalQty,
           stock_difference: diff,
@@ -145,7 +126,8 @@ export default function OpnamePage() {
         throw opnameProductError;
       }
 
-      alert("Stock opname saved successfully.");
+      alert("Opname data saved successfully.");
+      router.push("/historyopname");
     } catch (error) {
       console.error("Opname error:", error.message);
       alert("Failed to save opname data.");
@@ -158,20 +140,12 @@ export default function OpnamePage() {
       <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
         <div className="flex items-center gap-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
+            <FiMenu size={24}/>
           </button>
           <h1 className="text-xl font-semibold">E-Inventoria</h1>
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search..."
-              className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-[592px] h-[40px] text-black"
-            />
-            <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
-          </div>
           <FiBell className="text-black" size={20} />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gray-300 rounded-full" />
@@ -204,17 +178,26 @@ export default function OpnamePage() {
 
         {/* Main Content */}
         <div className="flex-1 bg-white p-12">
-          <h2 className="text-2xl font-semibold mb-12">Stock Opname</h2>
-          <Link href="/historyopname">
-              <button className="text-2xl font-semibold hover:text-sky-700">×
-              </button>
-          </Link>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-semibold">Stock Opname</h2>
+            <Link href="/historyopname">
+              <button className="text-2xl font-semibold hover:text-sky-700">×</button>
+            </Link>
+          </div>
 
-          <div className="space-y-12">
+          <div className="h-12" />
 
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">
-                Items
+          <form
+            className="space-y-8 w-[600px]"
+            onSubmit={e => {
+              e.preventDefault();
+              calculateDifference();
+            }}
+          >
+            {/* Product */}
+            <div className="flex items-center gap-8">
+              <label className="w-[150px] text-base font-semibold text-black mb-4">
+                Items <span className="text-red-500">*</span>
               </label>
               <select
                 name="items"
@@ -234,7 +217,8 @@ export default function OpnamePage() {
                     });
                   }
                 }}
-                className="border-[2px] border-black rounded-[12px] h-[48px] px-4 text-black w-[400px]"
+                className="border border-black rounded-[12px] h-[42px] px-4 text-black outline-none w-full"
+                required
               >
                 <option value="">Select Product</option>
                 {products.map((product) => (
@@ -246,8 +230,8 @@ export default function OpnamePage() {
             </div>
 
             {/* Quantity (read-only) */}
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">
+            <div className="flex items-center gap-8">
+              <label className="w-[150px] text-base font-semibold text-black mb-4">
                 Quantity
               </label>
               <input
@@ -255,27 +239,28 @@ export default function OpnamePage() {
                 name="quantity"
                 value={formData.quantity}
                 readOnly
-                className="bg-[#f3f3f3] border-[2px] border-black rounded-[12px] h-[48px] px-6 text-black w-[400px]"
+                className="bg-[#f3f3f3] border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
               />
             </div>
 
             {/* Physical Quantity (user input) */}
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">
-                Real Stock
+            <div className="flex items-center gap-8">
+              <label className="w-[150px] text-base font-semibold text-black mb-4">
+                Real Stock <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 name="physicalQuantity"
                 value={formData.physicalQuantity}
                 onChange={handleChange}
-                className="border-[2px] border-black rounded-[12px] h-[48px] px-6 text-black w-[400px]"
+                className="border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
+                required
               />
             </div>
 
             {/* Different Stock (read-only) */}
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">
+            <div className="flex items-center gap-8">
+              <label className="w-[150px] text-base font-semibold text-black mb-4">
                 Different Stock
               </label>
               <input
@@ -283,22 +268,21 @@ export default function OpnamePage() {
                 name="differentStock"
                 value={formData.differentStock}
                 readOnly
-                className="bg-[#f3f3f3] border-[2px] border-black rounded-[12px] h-[48px] px-6 text-black w-[400px]"
+                className="bg-[#f3f3f3] border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
               />
             </div>
 
-            {/* Calculate Button */}
-            <div className="flex items-center gap-70 mt-8">
-              <label className="w-[150px]" />
+            {/* Action Row */}
+            <div className="flex justify-end space-x-6">
               <button
-                onClick={calculateDifference}
+                type="submit"
                 className="bg-[#4AB98A] text-black font-semibold px-10 py-2 rounded-full text-[18px]"
                 disabled={!formData.productId || formData.physicalQuantity === ""}
               >
                 Calculate
               </button>
             </div>
-          </div>
+          </form>
         </div>
       </div>
     </div>

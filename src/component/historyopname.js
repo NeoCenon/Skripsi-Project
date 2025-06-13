@@ -7,7 +7,7 @@ import {
   FiMenu, 
   FiSearch, 
   FiBell, 
-  FiChevronDown, 
+  FiCalendar,
   FiMoreVertical, 
 } from "react-icons/fi";
 import {
@@ -27,16 +27,17 @@ import { useRouter } from 'next/navigation';
 
 export default function HistoryOpnamePage() {
   const [items, setItems] = useState([])
+  const [flattenedRows, setFlattenedRows] = useState([]);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null);
-  const [openMenuId, setOpenMenuId] = useState(null);
+  const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const router = useRouter();
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
-
   const [searchTerm, setSearchTerm] = useState('');
-
+  const pageSize = 5;
+  const router = useRouter();
+  const [statusFilter, setStatusFilter] = useState('');
   const [dateRange, setDateRange] = useState([
     {
       startDate: null,
@@ -46,101 +47,159 @@ export default function HistoryOpnamePage() {
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const datePickerRef = useRef();
-  const [flattenedRows, setFlattenedRows] = useState([]);
   const paginatedRows = flattenedRows.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
   useEffect(() => {
-    const role = localStorage.getItem('user_role')
-    if (role !== 'admin' && role !== 'owner') {
-      router.push('/unauthorized')
-    }
-  }, [])
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Failed to get user:", error.message);
+        return;
+      }
+      setUser(user);
+    };
+    getUser();
+    
+  }, []);
+  console.log('Fetched user:', user);
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, currentPage, dateRange]);
 
   useEffect(() => {
-    function handleClickOutside(event) {
+    const handleClickOutside = (event) => {
       if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
         setShowDatePicker(false);
       }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
     };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
     const handleClickOutsideMenu = (event) => {
       if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
-        setOpenMenuId(null);
+        setOpenMenuIndex(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutsideMenu);
     return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
   }, []);
 
-  // Fetch inventory items
-  useEffect(() => {
-    fetchItems()
-  }, [currentPage, searchTerm, dateRange])
+  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+  useEffect(() => { setCurrentPage(1); }, [dateRange]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-  
   async function fetchItems() {
+    if (!user) return;
 
     try {
       setError(null);
       setLoading(true);
 
-      let query = await supabase
-        .from('opname')
-        .select('*')
-        .order('opname_id', { ascending: true });
+      const { data, error: supabaseError } = await supabase 
+        .from('opname_product')
+        .select(`
+          opname_product_id,
+          real_stock,
+          stock_difference,
+          opnames (
+            opname_id,
+            opname_date,
+            user_id,
+            userr_id,
+            users (
+              user_name
+            )
+          ),
+          products (
+            product_id,
+            product_name,
+            product_category,
+            product_quantity
+          )
+        `)
+        .order('opname_product_id', { ascending: false });
 
-        
+      console.log(data, supabaseError);
+      if (supabaseError) {
+        console.error("Supabase fetch error:", supabaseError);
+        throw supabaseError;
+      }
 
-    // Apply date filter
-    if (dateRange[0].startDate && dateRange[0].endDate) {
-      const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
-      const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
-      query = query.gte('order_date', start).lte('order_date', end);
-    }
+      // let filteredRows = filteredData;
+      const userOpnames = (data || []).filter(item => item.opnames?.user_id === user.id);
+      let filtered = userOpnames;
+      console.log("Filtered opnames after all filters:", filtered);
 
-    const { data, error: supabaseError } = await query;
+      // Date filter
+      if (dateRange[0].startDate && dateRange[0].endDate) {
+        const start = new Date(dateRange[0].startDate);
+        const end = new Date(dateRange[0].endDate);
+        filtered = filtered.filter(item => {
+          const opnameDate = new Date(item.opnames?.opname_date);
+          return opnameDate >= start && opnameDate <= end;
+        });
+      }
 
-    if (supabaseError) throw supabaseError;
+      // Search filter
+      // const lowerSearch = searchTerm.toLowerCase();
+      if (searchTerm.trim()) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter(item =>
+          item.opnames?.opname_id?.toString().includes(search) ||
+          item.products?.product_name?.toLowerCase().includes(search) ||
+          item.products?.product_category?.toLowerCase().includes(search)
+        );
+      }
 
-      // Apply search filter on the client side
-    const lowerSearch = searchTerm.toLowerCase();
-    const filteredData = data.filter(product =>
-      product.product_id.toString().includes(lowerSearch) ||
-      product.product_name?.toLowerCase().includes(lowerSearch) ||
-      product.product_category?.toLowerCase().includes(lowerSearch)
-    );
-      setFlattenedRows(filteredData);
+      const flattened = filtered.map(item => ({
+        opname_product_id: item.opname_product_id,
+        opname_id: item.opnames?.opname_id,
+        opname_date: item.opnames?.opname_date,
+        product_quantity: item.products?.product_quantity,
+        product_name: item.products?.product_name,
+        product_category: item.products?.product_category,
+        real_stock: item.real_stock,
+        stock_difference: item.stock_difference,
+        user_id: item.opnames?.user_id,
+        userr_id: item.opnames?.userr_id,
+        user_name: item.opnames?.users?.user_name,
+      }));
 
+      const sorted = flattened.sort((a, b) => b.opname_id - a.opname_id);
+
+      setFlattenedRows(sorted);
+      setItems(filtered); // optional, in case you want full detail
+      
     } catch (err) {
-      setError(err.message);
-      console.error('Error:', err);
+      console.error('Error fetching opnames:', err.message);
+      setError('Failed to load opnames');
     } finally {
       setLoading(false);
     }
+  }
+
+  const handleNextPage = () => {
+    setCurrentPage(prevPage => prevPage + 1);
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prevPage => prevPage - 1);
     }
+  };
 
-    const handleNextPage = () => {
-      setCurrentPage(prevPage => prevPage + 1);
-    };
+  const totalDisplayedRows = flattenedRows.length;
 
-    const handlePreviousPage = () => {
-      if (currentPage > 1) {
-        setCurrentPage(prevPage => prevPage - 1);
-      }
-    };
+  // useEffect(() => {
+  //   const role = localStorage.getItem('user_role')
+  //   if (role !== 'admin' && role !== 'owner') {
+  //     router.push('/unauthorized')
+  //   }
+  // }, [])
 
 //     const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
 
@@ -154,21 +213,6 @@ export default function HistoryOpnamePage() {
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
       ];
 
-  // Add new item
-  async function addItem(newItem) {
-    try {
-      const { data, error } = await supabase
-        .from('opname')
-        .insert([newItem])
-        .select()
-      
-      if (error) throw error
-      setItems([...items, ...data])
-    } catch (error) {
-      console.error('Error adding item:', error)
-    }
-  }
-
   return (
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
       {/* Top Navbar */}
@@ -177,16 +221,14 @@ export default function HistoryOpnamePage() {
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
             <FiMenu size={24} className="text-black" />
           </button>
-          <h1 className="text-xl font-semibold text-black">
-            <span className="text-black">E-</span>Inventoria
-          </h1>
+          <h1 className="text-xl font-semibold"><span>E-</span>Inventoria</h1>
         </div>
 
         <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
+          <FiBell size={20} />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
+            <span>Admin ▾</span>
           </div>
         </div>
       </div>
@@ -217,99 +259,148 @@ export default function HistoryOpnamePage() {
         <div className="flex-1 flex flex-col bg-white"> 
 
           {/* Content */}
-          <div className="p-6">
+          <div className="flex-1 flex flex-col bg-white p-6">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">Stock Opname</h2>
-              <Link href="/addproduct">
-              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg font-medium text-[16px] hover:bg-sky-700">
+            <h2 className="text-2xl font-semibold">Stock Opname</h2>
+              <Link href="/addopname">
+              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
                 + Opname Stocks
               </button>
               </Link>
-             
             </div>
 
-            <div className="border-b mb-4"></div>
+            <div className="mb-4 border-b"></div>
 
             {/* Search & Filter */}
             <div className="flex justify-between items-center mb-6">
               <div className="relative w-[592px]">
                 <input
                   type="text"
-                  placeholder="Search by Product ID, Item, or Category"
+                  placeholder="Search by Opname ID, Item, or Category"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-full h-[40px] text-black"
+                  className="pl-4 pr-10 py-2 bg-gray-100 rounded-full w-full text-black"
                 />
                 <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
               </div>
+            
+
+              <div className="flex gap-4 items-center">
+                {/* Date Range Picker Button */}
+                <div className="relative flex items-center gap-2">
+                  <button
+                    onClick={() => setShowDatePicker(!showDatePicker)}
+                    className="flex items-center gap-2 px-4 h-[44px] border rounded-md text-black bg-white pr-10"
+                  >
+                    <FiCalendar />
+                    {dateRange[0].startDate && dateRange[0].endDate
+                      ? `${format(dateRange[0].startDate, 'dd/MM/yyyy')} - ${format(dateRange[0].endDate, 'dd/MM/yyyy')}`
+                      : 'Select Date Range'}
+                  </button>
+
+                  {/* Clear Button - positioned absolutely */}
+                  {dateRange[0].startDate && dateRange[0].endDate && (
+                    <button
+                      onClick={() =>
+                        setDateRange([{
+                          startDate: null,
+                          endDate: null,
+                          key: 'selection'
+                        }])
+                      }
+                      className="absolute right-2 text-sm text-gray-500 hover:text-red-500"
+                      title="Clear Date Filter"
+                      style={{ marginLeft: '-24px' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+
+                  {showDatePicker && (
+                    <div
+                      ref={datePickerRef}
+                      className="fixed top-24 right-10 z-50 bg-white shadow-lg border rounded-md p-4"
+                    >
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => setShowDatePicker(false)}
+                          className="text-gray-500 hover:text-red-500 text-sm font-bold"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <DateRange
+                        editableDateInputs={true}
+                        onChange={item => setDateRange([item.selection])}
+                        moveRangeOnFirstSelection={false}
+                        ranges={dateRange}
+                      />
+                    </div>
+                  )}
+              </div>  
             </div>
+          </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg mt-6" style={{ overflow: 'visible' }}>
-              <table className="w-full border-[2px] border-gray-300 font-[Poppins]">
+            {loading ? (
+              <div>Loading...</div>
+            ) : error ? (
+              <div className="text-red-500">{error}</div>
+            ) : (
+            <div className="bg-white rounded-lg overflow-visible mt-6 relative">
+              <table className="w-full border border-gray-300">
                 <thead>
-                  <tr className="border-b-[2px] text-[16px] font-normal text-center">
+                  <tr className="border-b text-center text-sm font-medium">
                   <th className="p-4">Opname ID</th>
+                  <th className="p-4">Created At</th>
                   <th className="p-4">Category</th>
                   <th className="p-4">Items</th>
                   <th className="p-4">Available Stock</th>
                   <th className="p-4">Real Stock</th>
-                  <th className="p-4">Stock Difference</th>
                   <th className="p-4">Opname By</th>
-                  <th className="p-4">Created At</th>
+                  <th className="p-4">Stock Difference</th>
                   <th className="p-4"></th>
                 </tr>
                 </thead>
 
                 <tbody>
                   {paginatedRows.map((row, index) => (
-                    <tr key={row.opname_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
+                    <tr key={index} className='text-center hover:bg-gray-100 cursor-pointer'>
                       <td className="p-4">{row.opname_id}</td>
+                      <td className="px-4 py-2">{format(new Date(row.opname_date), 'dd/MM/yyyy')}</td>
                       <td className="p-4">{row.product_category}</td>
                       <td className="p-4">{row.product_name}</td>
                       <td className="p-4">{row.product_quantity}</td>
-                      <td className="p-4">{row.opname_product.real_stock}</td>
-                      <td className="p-4">{row.opname_product.stock_difference}</td>
+                      <td className="p-4">{row.real_stock}</td>
                       <td className="p-4">{row.user_name}</td>
-                      <td className="p-4">{row.opname_date}</td>
+                      <td className="p-4">{row.stock_difference}</td>
                       <td className="p-4 relative">
                         <button
-                          onClick={() => setOpenMenuId(openMenuId === row.product_id ? null : row.product_id)}
-                          className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white transition duration-150 ease-in-out"
-                        >
+                            onClick={(e) => {
+                              e.stopPropagation(); // Prevent document click handler from firing
+                              setOpenMenuIndex(openMenuIndex === index ? null : index);
+                            }}
+                            className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white"
+                          >
                           <FiMoreVertical size={20} />
                         </button>
 
-                        {openMenuId === row.product_id && (
+                        {openMenuIndex === index && (
                           <div
-                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
+                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
                             onClick={(e) => e.stopPropagation()} 
                           >
-                            <Link
-                              href={{
-                                pathname: '/edit',
-                                query: {
-                                  product_id: row.product_id,
-                                  product_name: row.product_name,
-                                  product_category: row.product_category,
-                                  purchase_price: row.purchase_price,
-                                  sale_price: row.sale_price,
-                                  product_quantity: row.product_quantity,
-                                  product_stockout: row.product_stockout,
-                                  product_overstock: row.product_overstock,
-                                }
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/editopname?opname_id=${row.opname_id}&opname_product_id=${row.opname_product_id}`
+                                );
                               }}
-                              passHref
+                              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
                             >
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
-                              >
-                                Edit
-                              </div>
-                            </Link>
+                              Edit
+                            </button>
                           </div>
                         )}
                       </td>
@@ -318,6 +409,7 @@ export default function HistoryOpnamePage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Pagination Controls */}
             <div className="flex justify-between items-center mt-4">

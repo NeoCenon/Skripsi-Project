@@ -110,6 +110,10 @@ export default function StockPage() {
             instock_date,
             instock_status,
             user_id,
+            userr_id,
+            users(
+              user_name
+            ),
             suppliers (
               supplier_id,
               supplier_name
@@ -170,6 +174,7 @@ export default function StockPage() {
         instock_status: item.instocks?.instock_status,
         product_quantity: item.product_quantity,
         product_name: item.products?.product_name,
+        user_name: item.instocks?.users?.user_name,
         product_category: item.products?.product_category,
       }));
 
@@ -363,6 +368,7 @@ export default function StockPage() {
                   <th className="p-4">Item</th>
                   <th className="p-4">Supplier</th>
                   <th className="p-4">Quantity</th>
+                  <th className="p-4">Created By</th>
                   <th className="p-4">Status</th>
                   <th className="p-4"></th>
                 </tr>
@@ -377,6 +383,7 @@ export default function StockPage() {
                         <td className="p-4">{row.product_name}</td>
                         <td className="p-4">{row.supplier_name}</td>
                         <td className="p-4">{row.product_quantity}</td>
+                        <td className="p-4">{row.user_name}</td>
                         <td className="p-4">{row.instock_status}</td>
                         <td className="p-4 relative">
                           <button

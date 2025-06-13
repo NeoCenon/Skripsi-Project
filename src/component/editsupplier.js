@@ -66,24 +66,6 @@ export default function EditSupplierPage() {
     }
   };
 
-  const handleDelete = async () => {
-    const confirmDelete = confirm("Are you sure you want to delete this supplier?");
-    if (!confirmDelete) return;
-
-    const { error } = await supabase
-      .from("suppliers")
-      .delete()
-      .eq("supplier_id", supplier_id);
-
-    if (error) {
-      console.error(error);
-      alert("Failed to delete supplier!");
-    } else {
-      alert("Supplier deleted successfully!");
-      router.push("/supplier");
-    }
-  };
-
   const menuItems = [
     { icon: <FaChartBar size={24} />, label: "Dashboard", href: "/dashboard" },
     { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href: "/instock" },
@@ -145,7 +127,7 @@ export default function EditSupplierPage() {
         <div className="flex-1 bg-white p-12">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-semibold">Change Supplier Detail</h2>
-            <Link href="/product">
+            <Link href="/supplier">
               <button className="text-2xl font-semibold hover:text-sky-700">×</button>
             </Link>
           </div>
@@ -155,7 +137,7 @@ export default function EditSupplierPage() {
           </div>
 
           <div className="space-y-6">
-            {fields.map((field, idx) => (
+            {/* {fields.map((field, idx) => (
               <div key={idx} className="flex items-center gap-12">
                 <label className="w-[150px] text-base font-semibold text-black">
                   {field.label}
@@ -169,16 +151,47 @@ export default function EditSupplierPage() {
                   placeholder={field.label}
                 />
               </div>
-            ))}
+            ))} */}
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Supplier</label>
+                <input
+                type="text"
+                name="supplierName"
+                value={formData.supplierName}
+                readOnly
+                className="bg-gray-100 border border-black rounded-[12px] h-[42px] px-6 w-[400px] text-gray-500 cursor-not-allowed"
+              />
+            </div>
+
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Address</label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                placeholder="Enter destination"
+                className="border border-black rounded-[12px] h-[42px] px-6 w-[400px]"
+                required
+              />
+            </div>
+
+            <div className="flex items-center gap-12">
+              <label className="w-[150px] text-base font-semibold text-black">Address</label>
+              <input
+                type="text"
+                name="phoneNumber"
+                value={formData.phoneNumber}
+                onChange={handleChange}
+                placeholder="Enter address"
+                className="border border-black rounded-[12px] h-[42px] px-6 w-[400px]"
+                required
+              />
+            </div>
           </div>
 
-          <div className="mt-12 flex justify-between w-[600px]">
-            <button
-              onClick={handleDelete}
-              className="bg-[#F76B6B] text-white font-semibold px-10 py-2 rounded-full hover:bg-red-600"
-            >
-              Delete
-            </button>
+          <div className="mt-12 flex justify-end w-[600px]">
+            
             <button
               onClick={handleUpdate}
               className="bg-[#89E0F8] text-black font-semibold px-10 py-2 rounded-full hover:text-white hover:bg-[#5dcaf1]"

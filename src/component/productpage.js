@@ -54,6 +54,19 @@ export default function ProductPage() {
     getUser();
   }, []);
 
+  // useEffect(() => {
+  //   const checkUser = async () => {
+  //     const { data: { session } } = await supabase.auth.getSession();
+  //     if (!session) {
+  //       router.push("/login");
+  //     } else {
+  //       setLoading(false);
+  //     }
+  //   };
+  //   checkUser();
+  // }, [router]);
+  // if (loading) return <p>Login to access the page</p>;
+
   // Fetch products when user or filters change
   useEffect(() => {
     if (user) fetchItems();

@@ -147,7 +147,7 @@ export default function AddProduct() {
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
         <div className="flex items-center gap-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
+            <FiMenu size={24} />
           </button>
           <h1 className="text-xl font-semibold text-[#1C2D5A]">E-Inventoria</h1>
         </div>
