@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect } from 'react'
-import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar, FiMoreVertical } from "react-icons/fi";
+import { FiMenu, FiSearch, FiBell, FiCalendar, FiMoreVertical } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -68,26 +68,6 @@ export default function ProductPage() {
     if (user) fetchItems();
   }, [user, searchTerm, statusFilter, currentPage, dateRange]);
 
-  // useEffect(() => {
-  //   function handleClickOutsideGlobal(event) {
-  //     const menuButtons = document.querySelectorAll('.menu-button');
-  //     const isClickOnButton = [...menuButtons].some(btn => btn.contains(event.target));
-
-  //     const menuPopups = document.querySelectorAll('.menu-popup');
-  //     const isClickOnPopup = [...menuPopups].some(popup => popup.contains(event.target));
-
-  //     if (!isClickOnButton && !isClickOnPopup) {
-  //       setOpenMenuIndex(null);
-  //     }
-  //   }
-
-  //   document.addEventListener('mousedown', handleClickOutsideGlobal);
-  //   return () => {
-  //     document.removeEventListener('mousedown', handleClickOutsideGlobal);
-  //   };
-  // }, []);
-
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
@@ -118,7 +98,6 @@ export default function ProductPage() {
   try {
     setError(null);
     setLoading(true);
-    console.log('Inside try block');
 
     const { data, error: supabaseError } = await supabase 
       .from('order_product')
@@ -414,31 +393,6 @@ export default function ProductPage() {
                             className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
                             onClick={(e) => e.stopPropagation()} 
                           >
-                            {/* <Link
-                              href={{
-                                pathname: '/editorder',
-                                query: {
-                                  order_product_id: row.order_product_id,
-                                  order_id: row.order_id,
-                                  product_name: row.product_name,
-                                  product_category: row.product_category,
-                                  order_destination: row.order_destination,
-                                  product_quantity: row.product_quantity,
-                                  order_date: row.order_date,
-                                  order_status: row.order_status,
-                                }
-                              }}
-                              passHref
-                            >
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
-                              >
-                                Edit
-                              </div>
-                            </Link> */}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();

@@ -19,6 +19,7 @@ export default function EditInstockPage() {
       const router = useRouter();
       const searchParams = useSearchParams();
       const instock_id = searchParams.get("instock_id");
+      const instock_product_id = searchParams.get("instock_product_id");
 
       const [products, setProducts] = useState([]);
       const [statuses] = useState(["Pending", "Completed"]); 
@@ -48,45 +49,64 @@ export default function EditInstockPage() {
       // Fetch existing data
       useEffect(() => {
       const fetchInstockDetails = async () => {
-      const { data, error } = await supabase
-            .from("instocks")
-            .select(
-            `instock_date, instock_status,
-            suppliers(supplier_name),
-            instock_product:instock_product(instock_product_id, product_quantity, product_id, 
-                  product:products(product_name, product_category))`
-            )
-            .eq("instock_id", instock_id)
-            .single();
+            if (!instock_product_id) {
+                  console.error("Missing instock_product_id in URL");
+                  return;
+            }
 
-      if (error) {
-            console.error("Fetch error:", error);
-            return;
-      }
+            const { data, error } = await supabase
+                  .from("instock_product")
+                  .select(`
+                  instock_product_id,
+                  product_quantity,
+                  instocks (
+                        instock_id,
+                        instock_date,
+                        instock_status,
+                        user_id,
+                        suppliers (
+                        supplier_id,
+                        supplier_name
+                        )
+                  ),
+                  products (
+                        product_id,
+                        product_name,
+                        product_category
+                  )
+                  `)
+                  .eq("instock_product_id", instock_product_id)
+                  .single();
 
-      const instockProduct = Array.isArray(data.instock_product)
-            ? data.instock_product[0]
-            : data.instock_product;
+            if (error || !data) {
+                  console.error("Fetch error:", error);
+                  return;
+            }
 
-      if (!instockProduct?.product) {
-        console.warn("Missing product details");
-        return;
-      }
+            const instock = data.instocks;
+            const product = data.products;
 
-      setFormData({
-            productName: instockProduct.product.product_name || "",
-            category: instockProduct.product.product_category || "",
-            supplier: data.suppliers?.supplier_name || "",
-            quantity: instockProduct.product_quantity?.toString() || "",
-            status: data.instock_status || "",
-      });
-      setProductId(instockProduct.product_id);
-      setInitialQuantity(instockProduct.product_quantity);
-      setInstockProductId(instockProduct.instock_product_id);
+            if (!instock || !product) {
+                  console.warn("Missing instock or product details");
+                  return;
+                  
+            }
+
+            setFormData({
+                  productName: product.product_name || "",
+                  supplier: instock.suppliers?.supplier_name || "",
+                  quantity: data.product_quantity?.toString() || "",
+                  status: instock.instock_status || "",
+            });
+            setProductId(product.product_id);
+            setInitialQuantity(data.product_quantity);
+            setInstockProductId(data.instock_product_id);
       };
 
-      if (instock_id) fetchInstockDetails();
-      }, [instock_id]);
+      if (instock_product_id) {
+            fetchInstockDetails();
+      }
+      }, [instock_product_id]);
       
       useEffect(() => {      
       const fetchProducts = async () => {
@@ -107,33 +127,73 @@ export default function EditInstockPage() {
       const { supplier, status, quantity } = formData;
       const updatedQty = parseInt(quantity);
 
-      if (!instock_id || !productId || isNaN(updatedQty) || !supplier || !status) {
-            alert("All fields must be filled correctly!");
+      if (!instock_id || !instock_product_id || !productId) {
+      alert("Missing instock, product, or instock_product ID.");
+      return;
+      }
+
+      if (isNaN(updatedQty) || !supplier || !status) {
+      alert("Please fill all fields correctly.");
+      return;
+      } 
+
+      // / Get product overstock or quantity
+      const { data: productData, error: productError } = await supabase
+      .from("products")
+      .select("product_quantity, product_overstock")
+      .eq("product_id", productId)
+      .single();
+
+      if (productError || !productData) {
+      alert("Failed to retrieve product info.");
+      return;
+      }
+
+      // const quantityDelta = updatedQty - initialQuantity;
+      const newProductQuantity = productData.product_quantity - initialQuantity + updatedQty;
+      const maxAllowedQty = productData.product_overstock ?? Infinity;
+
+      if (newProductQuantity > maxAllowedQty) {
+            alert(`Resulting product quantity exceeds overstock limit (${maxAllowedQty}).`);
             return;
       }
 
-      if (!instockProductId) {
-            alert("Instock product ID is missing!");
+      if (newProductQuantity < 0) {
+            alert("Resulting product quantity cannot be negative.");
             return;
       }
 
-      const quantityDelta = updatedQty - initialQuantity;
-      // Update orders table
-      const { error: orderError } = await supabase
+      // Update product quantity
+      const { error: updateProductError } = await supabase
+      .from("products")
+      .update({ product_quantity: newProductQuantity })
+      .eq("product_id", productId);
+
+      if (updateProductError) {
+            console.error("Failed to update product quantity:", updateProductError);
+            return;
+      }
+
+      // Update instocks table
+      const { error: instockError } = await supabase
             .from("instocks")
             .update({
             instock_status: status,
             })
             .eq("instock_id", instock_id);
 
-      // Update order_product quantity
+      if (instockError) {
+            console.error("instock update failed:", instockError);
+      }
+
+      // Update instock_product quantity
       const { error: instockProductError } = await supabase
             .from("instock_product")
             .update({product_quantity: updatedQty})
-            .eq("instock_product_id", instockProductId);
+            .eq("instock_product_id", instock_product_id);
 
-      if (orderError || instockProductError) {
-            console.error(orderError || instockProductError);
+      if (instockError || instockProductError) {
+            console.error(instockError || instockProductError);
             alert("Failed to update instock!");
       } else {
             alert("Instock updated successfully!");
@@ -142,20 +202,90 @@ export default function EditInstockPage() {
       };
 
       const handleDelete = async () => {
-      if (!confirm("Are you sure you want to delete this instock?")) 
-      return;
+      if (!confirm("Are you sure you want to delete this instock?")) return;
 
-      await supabase.from("instock_product").delete().eq("instock_id", instock_id);
-      const { error } = await supabase.from("instocks").delete().eq("instock_id", instock_id);
-
-      if (error) {
-            console.error(error);
-            alert("Failed to delete instock!");
-      } else {
-            alert("Instock deleted successfully!");
-            router.push("/instock");
+      if (!productId || !instock_product_id || !initialQuantity) {
+            alert("Missing required data for deletion.");
+            return;
       }
+
+      // 1. Fetch current product quantity
+      const { data: productData, error: productError } = await supabase
+      .from("products")
+      .select("product_quantity, product_overstock")
+      .eq("product_id", productId)
+      .single();
+
+      if (productError || !productData) {
+      console.error("Failed to fetch product quantity before delete:", productError);
+      alert("Failed to retrieve product info.");
+      return;
+      }
+
+      // 2. Subtract the instock quantity that was added
+      const restoredQty = productData.product_quantity - initialQuantity;
+
+      const { error: productUpdateError } = await supabase
+      .from("products")
+      .update({ product_quantity: restoredQty })
+      .eq("product_id", productId);
+
+      if (productUpdateError) {
+      console.error("Failed to restore product quantity:", productUpdateError);
+      alert("Failed to delete instock.");
+      return;
+      }
+
+      // 3. Delete instock_product
+      const { error: instockProductError } = await supabase
+      .from("instock_product")
+      .delete()
+      .eq("instock_product_id", instock_product_id);
+
+      // Step 3: Check if any instock_product rows remain with this instock_id
+      const { data: remaining, error: remainingError } = await supabase
+      .from("instock_product")
+      .select("instock_product_id")
+      .eq("instock_id", instock_id);
+
+      if (!remainingError && remaining.length === 0) {
+      // Delete the instocks row if no associated instock_product left
+      const { error: instockDeleteError } = await supabase
+            .from("instocks")
+            .delete()
+            .eq("instock_id", instock_id);
+
+      if (instockDeleteError) {
+            console.error("Failed to delete instocks:", instockDeleteError);
+      }
+      }
+
+      alert("Instock deleted and product quantity restored.");
+      router.push("/instock");
       };
+
+      
+      // const { error: instockError } = await supabase
+      //       .from("instocks")
+      //       .delete()
+      //       .eq("instock_id", instock_id);
+
+      //  if (instockError || instockProductError) {
+      //       console.error(instockError || instockProductError);
+      //       alert("Failed to delete instock.");
+      // } else {
+      //       alert("Instock deleted and product quantity restored.");
+      //       router.push("/instock");
+      // }
+      // };
+
+      const fields = [
+            { label: "Items", name: "productName", readOnly: true },
+            { label: "Category", name: "category", readOnly: true },
+            { label: "Supplier", name: "supplier" },
+            { label: "Quantity", name: "quantity" },
+            { label: "Status", name: "status" },
+      ];
 
       return (
       <div className="flex flex-col h-screen bg-white text-black font-[Poppins]">
@@ -180,7 +310,7 @@ export default function EditInstockPage() {
             <div className="flex flex-1">
                   {/* Sidebar */}
                   {sidebarOpen && (
-                        <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+                        <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
                               <div className="flex flex-col items-center space-y-6 mt-6">
                               {[
                                     { icon: <FaChartBar size={24} />, label: "Dashboard", href: "/dashboard" },

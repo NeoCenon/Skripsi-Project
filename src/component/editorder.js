@@ -89,6 +89,7 @@ export default function EditOrderPage() {
       setInitialQuantity(data.product_quantity);
       setOrderProductId(data.order_product_id);
       };
+
       if (order_product_id) {
       fetchOrderDetails();
       }
@@ -155,7 +156,7 @@ export default function EditOrderPage() {
             .eq("order_id", order_id);
 
       if (orderError) {
-            console.error("orders update failed:", orderError);
+            console.error("order update failed:", orderError);
       }
 
       // Update order_product quantity
@@ -235,7 +236,7 @@ export default function EditOrderPage() {
             <div className="flex flex-1">
                   {/* Sidebar */}
                   {sidebarOpen && (
-                        <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+                        <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
                               <div className="flex flex-col items-center space-y-6 mt-6">
                               {[
                                     { icon: <FaChartBar size={24} />, label: "Dashboard", href: "/dashboard" },

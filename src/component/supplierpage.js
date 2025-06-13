@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
-import { useState, useEffect } from 'react'
-import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar, FiMoreVertical } from "react-icons/fi";
+import { useState, useEffect, useRef } from 'react'
+import { FiMenu, FiSearch, FiBell, FiMoreVertical } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -13,22 +13,23 @@ import {
   FaClipboardCheck,
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
-import { DateRange } from 'react-date-range';
-import 'react-date-range/dist/styles.css'; 
-import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
-import { useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function SupplierPage() {
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState([]);
+  const [flattenedRows, setFlattenedRows] = useState([]);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openMenuId, setOpenMenuId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState('');
   const pageSize = 5;
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const router = useRouter();
+  const datePickerRef = useRef();
 
   const [dateRange, setDateRange] = useState([
     {
@@ -38,12 +39,29 @@ export default function SupplierPage() {
     }
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const datePickerRef = useRef();
-  const [flattenedRows, setFlattenedRows] = useState([]);
+  
   const paginatedRows = flattenedRows.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
+
+   useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Failed to get user:", error.message);
+        return;
+      }
+      setUser(user);
+    };
+    getUser();
+  }, []);
+
+  // Fetch products when user or filters change
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, currentPage, dateRange]);
+
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -53,35 +71,51 @@ export default function SupplierPage() {
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch inventory items
   useEffect(() => {
-    fetchItems()
-  }, [currentPage, searchTerm, dateRange])
+      const handleClickOutsideMenu = (event) => {
+        if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
+          setOpenMenuId(null);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutsideMenu);
+      return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
+  }, []);
+
+  // // Fetch inventory items
+  // useEffect(() => {
+  //   fetchItems()
+  // }, [currentPage, searchTerm, dateRange])
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
   async function fetchItems() {
-
+    if (!user) return;
     try {
       setError(null);
       setLoading(true);
 
-      let { data, error: supabaseError } = await supabase
+      let query = supabase
       .from('suppliers')
-      .select('supplier_id, supplier_name, supplier_address, supplier_phone')
+      .select('*')
+      .eq('user_id', user.id)
       .order('supplier_id', { ascending: true });
 
+      if (dateRange[0].startDate && dateRange[0].endDate) {
+        const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
+        const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
+        query = query.gte('created_at', start).lte('created_at', end); // Adjust to correct column if needed
+      }
+
+      const { data, error: supabaseError } = await query;
       if (supabaseError) throw supabaseError;
 
+      console.log('Data received from Supabase:', data);
     
-
       // Apply search filter on the client side
     const lowerSearch = searchTerm.toLowerCase();
     const filteredData = data.filter(supplier =>
@@ -91,7 +125,6 @@ export default function SupplierPage() {
       supplier.supplier_phone?.toLowerCase().includes(lowerSearch)
     );
       setFlattenedRows(filteredData);
-
     } catch (err) {
       setError(err.message);
       console.error('Error:', err);
@@ -110,7 +143,7 @@ export default function SupplierPage() {
       }
     };
 
-    const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
+    // const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
 
     const menuItems = [
       { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
@@ -122,39 +155,22 @@ export default function SupplierPage() {
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
       ];
 
-  // Add new item
-  async function addItem(newItem) {
-    try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert([newItem])
-        .select()
-      
-      if (error) throw error
-      setItems([...items, ...data])
-    } catch (error) {
-      console.error('Error adding item:', error)
-    }
-  }
-
   return (
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
       {/* Top Navbar */}
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
         <div className="flex items-center gap-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
+            <FiMenu size={24} />
           </button>
-          <h1 className="text-xl font-semibold text-black">
-            <span className="text-black">E-</span>Inventoria
-          </h1>
+          <h1 className="text-xl font-semibold"><span>E-</span>Inventoria</h1>
         </div>
 
         <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
+          <FiBell size={20} />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
+            <span>Admin ▾</span>
           </div>
         </div>
       </div>
@@ -182,24 +198,19 @@ export default function SupplierPage() {
         )}
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-white"> 
-
-          {/* Content */}
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">Suppliers</h2>
-              <Link href="/addsupplier">
-              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg font-medium text-[16px] hover:bg-sky-700">
+          <div className="flex-1 flex flex-col bg-white p-6">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-2xl font-semibold">Suppliers</h2>
+            <Link href="/addsupplier">
+              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
                 + Add Supplier
               </button>
-              </Link>
-             
-            </div>
-
-            <div className="border-b mb-4"></div>
+            </Link>
+          </div>
 
             {/* Search & Filter */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="mb-4 border-b" />
+            <div className="mb-6">
               <div className="relative w-[592px]">
                 <input
                   type="text"
@@ -213,10 +224,15 @@ export default function SupplierPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg mt-6" style={{ overflow: 'visible' }}>
-              <table className="w-full border-[2px] border-gray-300 font-[Poppins]">
+            {loading ? (
+              <div>Loading...</div>
+            ) : error ? (
+              <div className="text-red-500">{error}</div>
+            ) : (
+            <div className="bg-white rounded-lg overflow-visible">
+              <table className="w-full border border-gray-300">
                 <thead>
-                  <tr className="border-b-[2px] text-[16px] font-normal text-center">
+                  <tr className="border-b text-center text-sm font-medium">
                   <th className="p-4">Supplier ID</th>
                   <th className="p-4">Name</th>
                   <th className="p-4">Address</th>
@@ -227,7 +243,7 @@ export default function SupplierPage() {
 
                 <tbody>
                   {paginatedRows.map((row, index) => (
-                    <tr key={row.supplier_id} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center ">
+                    <tr key={row.supplier_id} className="text-center hover:bg-gray-50">
                       <td className="p-4">{row.supplier_id}</td>
                       <td className="p-4">{row.supplier_name}</td>
                       <td className="p-4">{row.supplier_address}</td>
@@ -241,27 +257,21 @@ export default function SupplierPage() {
                         </button>
 
                         {openMenuId === row.supplier_id && (
-                          <div
-                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
-                            onClick={(e) => e.stopPropagation()} 
+                          <div className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
+                            // onClick={(e) => e.stopPropagation()} 
                           >
                             <Link
                               href={{
                                 pathname: '/editsupplier',
-                                query: {
-                                  supplier_id: row.supplier_id,
-                                  supplier_name: row.supplier_name,
-                                  supplier_address: row.supplier_address,
-                                  supplier_phone: row.supplier_phone,
-                                }
+                                query: { ...row }
                               }}
                               passHref
                             >
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                                className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
+                              <div className="px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
+                                // onClick={(e) => {
+                                //   e.stopPropagation();
+                                // }}
+                                // className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
                               >
                                 Edit
                               </div>
@@ -274,6 +284,7 @@ export default function SupplierPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Pagination Controls */}
             <div className="flex justify-between items-center mt-4">
@@ -295,8 +306,6 @@ export default function SupplierPage() {
                 Next
               </button>
             </div>
-
-          </div>
         </div>
       </div>
     </div>

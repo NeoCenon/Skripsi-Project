@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect } from 'react'
-import { FiMenu, FiSearch, FiBell, FiChevronDown, FiCalendar, FiMoreVertical } from "react-icons/fi";
+import { FiMenu, FiSearch, FiBell, FiCalendar, FiMoreVertical } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -14,24 +14,25 @@ import {
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { DateRange } from 'react-date-range';
-// import 'react-date-range/dist/styles.css'; 
-// import 'react-date-range/dist/theme/default.css';
+import 'react-date-range/dist/styles.css'; 
+import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
 import { useRef } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function StockPage() {
   const [items, setItems] = useState([])
+  const [flattenedRows, setFlattenedRows] = useState([]);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null);
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
-
   const [searchTerm, setSearchTerm] = useState('');
+  const pageSize = 5;
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState('');
-
   const [dateRange, setDateRange] = useState([
     {
       startDate: null,
@@ -41,30 +42,31 @@ export default function StockPage() {
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const datePickerRef = useRef();
-  const [flattenedRows, setFlattenedRows] = useState([]);
+
   const paginatedRows = flattenedRows.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
+  // Fetch user
   useEffect(() => {
-    function handleClickOutsideGlobal(event) {
-      const menuButtons = document.querySelectorAll('.menu-button');
-      const isClickOnButton = [...menuButtons].some(btn => btn.contains(event.target));
-
-      const menuPopups = document.querySelectorAll('.menu-popup');
-      const isClickOnPopup = [...menuPopups].some(popup => popup.contains(event.target));
-
-      if (!isClickOnButton && !isClickOnPopup) {
-        setOpenMenuIndex(null);
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("Failed to get user:", error.message);
+        return;
       }
-    }
-
-    document.addEventListener('mousedown', handleClickOutsideGlobal);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutsideGlobal);
+      setUser(user);
     };
+    getUser();
+    
   }, []);
+  console.log('Fetched user:', user);
+
+  // Fetch products when user or filters change
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, statusFilter, currentPage, dateRange]);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -74,103 +76,115 @@ export default function StockPage() {
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch inventory items
   useEffect(() => {
-    fetchItems()
-  }, [currentPage, searchTerm, statusFilter, dateRange])
+      const handleClickOutsideMenu = (event) => {
+        if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
+          setOpenMenuIndex(null);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutsideMenu);
+      return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
+  }, []);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [dateRange]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
+  useEffect(() => { setCurrentPage(1); }, [statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [dateRange]);
 
   async function fetchItems() {
+    if (!user) return;
 
     try {
       setError(null);
       setLoading(true);
 
-      let query = supabase
-            .from('instocks')
-            .select(`
-              instock_id,
-              instock_date,
-              instock_status,
-              supplier:suppliers (
-                supplier_name
-              ),
-              instock_product (
-                product_quantity,
-                product:products (
-                  product_name,
-                  product_category
-                )
-              )
-            `)
-      .order('instock_id', { ascending: true });
+      const { data, error: supabaseError } = await supabase 
+        .from('instock_product')
+        .select(`
+          instock_product_id,
+          product_quantity,
+          instocks (
+            instock_id,
+            instock_date,
+            instock_status,
+            user_id,
+            suppliers (
+              supplier_id,
+              supplier_name
+            )
+          ),
+          products (
+            product_id,
+            product_name,
+            product_category
+          )
+        `)
+      .order('instock_product_id', { ascending: true });
+      console.log(data, error);
 
-    // Apply status filter
-    if (statusFilter) {
-      query = query.ilike('instock_status', statusFilter.toLowerCase());
-    }
+      if (supabaseError){
+          console.error("Supabase fetch error:", supabaseError);
+          throw supabaseError;
+        } 
 
-    // Apply date filter
-    if (dateRange[0].startDate && dateRange[0].endDate) {
-      const start = format(dateRange[0].startDate, 'yyyy-MM-dd');
-      const end = format(dateRange[0].endDate, 'yyyy-MM-dd');
-      query = query.gte('instock_date', start).lte('instock_date', end);
-    }
+      const filteredData = (data || []).filter(item => item.instocks?.user_id === user.id);
 
-    const { data, error: supabaseError } = await query;
-      if (supabaseError) throw supabaseError;
+      // let filteredRows = filteredData;
+      const userInstocks = (data || []).filter(item => item.instocks?.user_id === user.id);
+      let filtered = userInstocks;
+      console.log("Filtered instocks after all filters:", filtered);
 
-      // Apply search filter on the client side
-      // const lowerSearch = searchTerm.toLowerCase();
-      const allRows = data.flatMap(instock =>
-            instock.instock_product.map(productItem => ({
-            instock_id: instock.instock_id,
-            instock_date: instock.instock_date,
-            instock_status: instock.instock_status,
-            product_name: productItem.product?.product_name,
-            product_category: productItem.product?.product_category,
-            supplier_name: instock.supplier?.supplier_name,
-            product_quantity: productItem.product_quantity,
-            }))
-      );
-
-      const lowerSearch = searchTerm.toLowerCase();
-      let filteredRows = allRows;
-
-      if (searchTerm) {
-      filteredRows = filteredRows.filter(row =>
-      row.instock_id.toString().includes(lowerSearch) ||
-      row.product_name?.toLowerCase().includes(lowerSearch) ||
-      row.product_category?.toLowerCase().includes(lowerSearch) ||
-      row.supplier_name?.toLowerCase().includes(lowerSearch)
-      );
+      // Status filter
+      if (statusFilter) {
+        filtered = filtered.filter(item =>
+          item.instocks?.instock_status?.toLowerCase() === statusFilter.toLowerCase()
+        );
       }
 
-      setFlattenedRows(filteredRows);
+      // Apply date filter
+      if (dateRange[0].startDate && dateRange[0].endDate) {
+        const start = new Date(dateRange[0].startDate);
+        const end = new Date(dateRange[0].endDate);
+        filtered = filtered.filter(item => {
+          const instockDate = new Date(item.instocks?.instock_date);
+          return instockDate >= start && instockDate <= end;
+        });
+      }
+
+      if (searchTerm.trim()) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter(item =>
+          item.instocks?.instock_id?.toString().includes(search) ||
+          item.products?.product_name?.toLowerCase().includes(search) ||
+          item.products?.product_category?.toLowerCase().includes(search)
+        );
+      }
+
+      const flattened = filtered.map(item => ({
+        instock_product_id: item.instock_product_id,
+        instock_id: item.instocks?.instock_id,
+        instock_date: item.instocks?.instock_date,
+        supplier_name: item.instocks?.suppliers?.supplier_name,
+        instock_status: item.instocks?.instock_status,
+        product_quantity: item.product_quantity,
+        product_name: item.products?.product_name,
+        product_category: item.products?.product_category,
+      }));
+
+      const sorted = flattened.sort((a, b) => b.instock_id - a.instock_id);
+      
+      setFlattenedRows(sorted);
+      setItems(filtered);
 
       } catch (err) {
-            setError(err.message);
-            console.error('Error:', err);
+        console.error('Error fetching instocks:', err.message);
+        setError('Failed to load instocks');
       } finally {
-            setLoading(false);
+        setLoading(false);
       }
-      }
+    }
 
     const handleNextPage = () => {
       setCurrentPage(prevPage => prevPage + 1);
@@ -182,7 +196,7 @@ export default function StockPage() {
       }
     };
 
-    const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
+    const totalDisplayedRows = flattenedRows.length;
 
     const menuItems = [
       { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
@@ -194,38 +208,22 @@ export default function StockPage() {
       { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
     ];
 
-    async function addItem(newItem) {
-        try {
-          const { data, error } = await supabase
-            .from('instocks')
-            .insert([newItem])
-            .select()
-          
-          if (error) throw error
-          setItems([...items, ...data])
-        } catch (error) {
-          console.error('Error adding item:', error)
-        }
-      }
-
   return (
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
       {/* Top Navbar */}
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
         <div className="flex items-center gap-4">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
+            <FiMenu size={24} />
           </button>
-          <h1 className="text-xl font-semibold text-black">
-            <span className="text-black">E-</span>Inventoria
-          </h1>
+          <h1 className="text-xl font-semibold"><span>E-</span>Inventoria</h1>
         </div>
 
         <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
+          <FiBell size={20} />
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
+            <span>Admin ▾</span>
           </div>
         </div>
       </div>
@@ -233,7 +231,7 @@ export default function StockPage() {
       <div className="flex flex-1">
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
+          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
             <div className="flex flex-col items-center space-y-6 mt-6">
               {menuItems.map((item, index) => (
                 <Link href={item.href} key={index}>
@@ -256,17 +254,17 @@ export default function StockPage() {
         <div className="flex-1 flex flex-col bg-white"> 
 
           {/* Content */}
-          <div className="p-6">
+          <div className="flex-1 flex flex-col bg-white p-6">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-semibold text-black">inStock</h2>
+            <h2 className="text-2xl font-semibold">Instocks</h2>
               <Link href="/addstock">
-              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg font-medium text-[16px] hover:bg-sky-700">
-                + Add inStock
+              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
+                + Add Instock
               </button>
               </Link>
             </div>
 
-            <div className="border-b mb-4"></div>
+            <div className="mb-4 border-b"></div>
 
             {/* Search & Filter */}
             <div className="flex justify-between items-center mb-6">
@@ -350,10 +348,15 @@ export default function StockPage() {
             </div>
 
             {/* Table */}
-            <div className="bg-white rounded-lg overflow-hiddenvisible mt-6 relative">
-              <table className="w-full border-[2px] border-gray-300 font-[Poppins] overflow-visible relative">
+            {loading ? (
+              <div>Loading...</div>
+            ) : error ? (
+              <div className="text-red-500">{error}</div>
+            ) : (
+            <div className="bg-white rounded-lg overflow-visible mt-6 relative">
+              <table className="w-full border border-gray-300">
                 <thead>
-                  <tr className="border-b-[2px] text-[16px] font-normal text-center">
+                  <tr className="border-b text-center text-sm font-medium">
                   <th className="p-4">InStock ID</th>
                   <th className="p-4">Created At</th>
                   <th className="p-4">Category</th>
@@ -365,11 +368,11 @@ export default function StockPage() {
                 </tr>
                 </thead>
 
-                <tbody className="relative overflow-visible">
+                <tbody className="relative text-center overflow-visible">
                   {paginatedRows.map((row, index) => (
-                    <tr key={`${row.instock_id}-${index}`} className="border-b-[2px] hover:bg-gray-50 text-[16px] text-center">
+                    <tr key={index}>
                       <td className="p-4">{row.instock_id}</td>
-                        <td className="p-4">{row.instock_date}</td>
+                        <td className="p-4">{format(new Date(row.instock_date), 'dd/MM/yyyy')}</td>
                         <td className="p-4">{row.product_category}</td>
                         <td className="p-4">{row.product_name}</td>
                         <td className="p-4">{row.supplier_name}</td>
@@ -381,39 +384,27 @@ export default function StockPage() {
                               e.stopPropagation(); // Prevent document click handler from firing
                               setOpenMenuIndex(openMenuIndex === index ? null : index);
                             }}
-                            className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white transition duration-150 ease-in-out"
+                            className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white"
                           >
                             <FiMoreVertical size={20} />
                           </button>
   
                           {openMenuIndex === index && (
                             <div
-                              className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border border-gray-200 rounded shadow-lg z-50"
+                              className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
                               onClick={(e) => e.stopPropagation()} 
                             >
-                              <Link
-                                href={{
-                                  pathname: '/editinstock',
-                                  query: {
-                                    instock_id: row.instock_id,
-                                    product_name: row.product_name,
-                                    product_category: row.product_category,
-                                    supplier_name: row.supplier_name,
-                                    product_quantity: row.product_quantity,
-                                    instock_status: row.instock_status,
-                                  }
-                                }}
-                                passHref
-                              >
-                                <div
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                  }}
-                                  className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer"
-                                >
-                                  Edit
-                                </div>
-                              </Link>
+                              <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(
+                                  `/editstock?instock_id=${row.instock_id}&instock_product_id=${row.instock_product_id}`
+                                );
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                            >
+                              Edit
+                            </button>
                             </div>
                           )}
                         </td>
@@ -422,6 +413,7 @@ export default function StockPage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Pagination Controls */}
             <div className="flex justify-between items-center mt-4">

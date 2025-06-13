@@ -116,7 +116,7 @@ export default function AddOrder() {
       .insert([{ 
         order_destination: orderData.destination, 
         order_status: "pending",
-        user_id: userId, // Link to authenticated user
+        user_id: userId, 
       }])
       .select()
 
@@ -160,10 +160,8 @@ export default function AddOrder() {
         })
       };
     setSubmitting(false);
-  }
+  };
   
-  
-
   const handleProductChange = async(index, field, value) => {
   // Prevent negative quantities
   if (field === 'quantity' && value !== '' && parseInt(value) < 0) {

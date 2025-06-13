@@ -31,23 +31,48 @@ export default function AddSupplier() {
     const { supplierName, supplierAddress, supplierPhone } = formData;
 
     // 2. Validation
-    if (!supplierName|| !supplierAddress || !supplierPhone) {
-      alert('Please fill in all fields!');
+    if (
+      supplierName.trim() === '' ||
+      supplierAddress.trim() === '' ||
+      supplierPhone.trim() === ''
+    ) {
+      alert('Please fill in all required fields!');
       return;
     }
 
     // 3. Send to Supabase
-    const { data, error } = await supabase.from('suppliers').insert([
-      {
-        supplier_name: supplierName,
-        supplier_address: supplierAddress,
-        supplier_phone: supplierPhone,
-      },
-    ]).select();
+    try{
+ 
+    const { data: existingSuppliers, error: checkError } = await supabase
+    .from('suppliers')
+    .select('supplier_name')
+        .eq('supplier_name', supplierName.trim());
+
+      if (checkError) {
+        console.error("Error checking for duplicates:", checkError);
+        alert('Error checking for duplicate suppliers. Please try again.');
+        return;
+      }
+
+      if (existingSuppliers && existingSuppliers.length > 0) {
+        alert(`Supplier "${supplierName}" already exists!`);
+        return;
+      }
+    
+      const cleanData = {
+      supplier_name: supplierName.trim(),
+      supplier_address: supplierAddress.trim(),
+      supplier_phone: supplierPhone.trim(),
+      };
+
+    const { data, error } = await supabase
+    .from('suppliers')
+    .insert([cleanData])
+    .select();
 
     if (error) {
-      console.error(error);
-      alert('Failed to save supplier data!');
+      console.error("Supabase Insert Error:", error.message || error);
+      alert(`Failed to save supplier: ${error.message || 'Unknown error'}`);
     } else {
       alert('Supplier added successfully!');
       setFormData({
@@ -56,7 +81,11 @@ export default function AddSupplier() {
         supplierPhone: '',
       });
     }
-  };
+  }catch (err) {
+      console.error("Unexpected error:", err);
+      alert('An unexpected error occurred. Please try again.');
+    }
+  }; 
 
   const menuItems = [
     { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },

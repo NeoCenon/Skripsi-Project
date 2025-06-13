@@ -114,7 +114,6 @@ export default function ProductPage() {
         product.product_name?.toLowerCase().includes(lowerSearch) ||
         product.product_category?.toLowerCase().includes(lowerSearch)
       );
-
       setFlattenedRows(filteredData);
     } catch (err) {
       setError(err.message);
@@ -195,7 +194,6 @@ export default function ProductPage() {
           </div>
 
           <div className="mb-4 border-b" />
-
           <div className="mb-6">
             <div className="relative w-[592px]">
               <input
@@ -230,6 +228,7 @@ export default function ProductPage() {
                     <th className="p-4"></th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {paginatedRows.map(row => (
                     <tr key={row.product_id} className="text-center hover:bg-gray-50">
@@ -257,6 +256,7 @@ export default function ProductPage() {
                                 pathname: '/editproduct',
                                 query: { ...row }
                               }}
+                              // passHref
                             >
                               <div className="px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer">
                                 Edit

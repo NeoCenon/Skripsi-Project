@@ -23,29 +23,96 @@ export default function AddinStock() {
 
   const [instockData, setInstockData] = useState({
     supplier: '',
-    products: [{ productId: '', quantity: '' }], // dynamic list of products
+    products: [{ 
+      productId: '', 
+      quantity: '',
+      availableStock: null,
+      overstockLimit: null, 
+    }], // dynamic list of products
   });
 
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-  
-  if (submitting) return;
-    setSubmitting(true);
+  const [productOptions, setProductOptions] = useState([]);
 
-  if (!instockData.supplier || instockData.products.some(p => !p.productId || !p.quantity)) {
-    alert("Please fill all fields!");
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const { data, error } = await supabase.from("products").select();
+      if (!error) setProductOptions(data);
+    };
+    fetchProducts();
+  }, []);
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+      setSubmitting(true);
+
+    const isFormInvalid = !instockData.supplier || instockData.products.some(
+      p => !p.productId || !p.quantity
+    );
+
+    if (isFormInvalid) {
+      alert("Please fill all fields!");
+      setSubmitting(false);
+      return;
+    }
+
+    const productIds = instockData.products.map(p => p.productId);
+    const hasDuplicateProducts = new Set(productIds).size !== productIds.length;
+
+    if (hasDuplicateProducts) {
+    alert("You cannot add the same product multiple times in one instock!");
     setSubmitting(false);
     return;
   }
+
+  const hasInvalidStock = instockData.products.some(p => {
+    const quantity = parseInt(p.quantity);
+    const availableStock = p.availableStock;
+    const overstockLimt = p.overstockLimit;
+
+  if (isNaN(quantity)) return true;
+    if (quantity <= 0) return true;
+
+    if (availableStock === null) return true;
+    if (p.overstockLimit !== null) {
+      const newTotal = availableStock + quantity;
+      if (newTotal > p.overstockLimit) return true;
+    }
+
+    return false;
+  });
+
+  if (hasInvalidStock) {
+    alert("Please check the quantity limits for your products");
+    setSubmitting(false);
+    return;
+  }
+
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+    const userId = userData?.user?.id || null;
+    console.log('User ID:', userId);
+    if (userError) {
+      console.error('User Fetch Error:', userError);
+      alert("Failed to fetch user data!");
+      setSubmitting(false);
+      return;
+    } 
   
+    if (!userId) {
+      alert("User not authenticated!");
+      setSubmitting(false);
+      return;
+    }
 
   // Insert into instock table
   const { data: instockInsert, error: instockError } = await supabase
     .from("instocks")
     .insert([{ 
       supplier_id: instockData.supplier, 
-      instock_status: "pending" }])
+      instock_status: "pending",
+      user_id: userId,
+    }])
     .select()
 
   if (instockError || !instockInsert) {
@@ -56,16 +123,6 @@ export default function AddinStock() {
   }
 
   const instockId = instockInsert[0].instock_id;
-
-  const productIds = instockData.products.map(p => p.productId);
-  
-  const hasDuplicateProducts = new Set(productIds).size !== productIds.length;
-  
-  if (hasDuplicateProducts) {
-    alert("You cannot add the same product multiple times in one instock!");
-    setSubmitting(false);
-    return;
-  }
 
   // Insert into instock_product table
   const instockProducts = instockData.products.map(p => ({
@@ -78,18 +135,41 @@ export default function AddinStock() {
     .from("instock_product")
     .insert(instockProducts);
 
+  for (const p of instockData.products) {
+    const { error: updateError } = await supabase
+      .from("products")
+      .update({
+        product_quantity: p.availableStock + parseInt(p.quantity),
+      })
+      .eq("product_id", p.productId);
+
+    if (updateError) {
+      console.error(`Failed to update stock for product ${p.productId}:`, updateError);
+      alert("Stock update failed after instock creation.");
+    }
+  }
+
+
     if (productInsertError) {
       alert("Failed to link products!");
       console.error('Product Link Error:', productInsertError);
-    } else {
-      alert("InStock created successfully!");
-      setInstockData({ supplier: '', products: [{ productId: '', quantity: '' }] });
-    }
-
+      setSubmitting(false);
+      return;
+    } 
+    if (!productInsertError) {
+        alert("Instock created successfully!");
+        setInstockData({ 
+          supplier: '', 
+          products: [{ 
+            productId: '', 
+            quantity: '', 
+            availableStock: null,
+            overstockLimit: null,
+          }]
+        })
+    };
     setSubmitting(false);
   };
-
-  const [productOptions, setProductOptions] = useState([]);
 
   const [supplierOptions, setSupplierOptions] = useState([]);
   useEffect(() => {
@@ -105,25 +185,33 @@ export default function AddinStock() {
       }
     };
     fetchSuppliers();
-
-    const fetchProducts = async () => {
-    const { data, error } = await supabase
-      .from("products")
-      .select("product_id, product_name");
-
-      if (error) {
-        console.error("Error fetching products:", error);
-      } else {
-        setProductOptions(data);
-      }
-    };
-
-    fetchProducts();
   }, []);
 
-  const handleProductChange = (index, field, value) => {
+  const handleProductChange = async(index, field, value) => {
+  // Prevent negative quantities
+  if (field === 'quantity' && value !== '' && parseInt(value) < 0) {
+    return;
+  }
+  
   const updated = [...instockData.products];
   updated[index][field] = value;
+  
+  // When productId is selected, fetch stock from Supabase
+  if (field === 'productId') {
+    const { data, error } = await supabase
+      .from('products')
+      .select('product_quantity, product_overstock')
+      .eq('product_id', value)
+      .single();
+
+    if (!error && data) {
+      updated[index].availableStock = data.product_quantity;
+      updated[index].overstockLimit = data.product_overstock;
+    } else {
+      console.error('Error fetching product:', error);
+    }
+  }
+   
   setInstockData({ ...instockData, products: updated });
   };
 
@@ -210,7 +298,7 @@ export default function AddinStock() {
                   <div className="flex flex-col">
                     <label className="text-sm font-semibold text-black mb-1">Product</label>
                     <select
-                      value={item.productId}
+                      value={item.productId || ''}
                       onChange={(e) => handleProductChange(index, 'productId', e.target.value)}
                       className="border border-black rounded-[12px] h-[42px] px-4 text-black outline-none"
                     >
@@ -243,12 +331,30 @@ export default function AddinStock() {
                     <label className="text-sm font-semibold text-black mb-1">Quantity</label>
                     <input
                       type="number"
-                      placeholder="Qty"
-                      value={item.quantity}
-                      onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
+                      min="0"
+                      placeholder={
+                        item.availableStock !== null
+                          ? item.overstockLimit !== null
+                            ? `Available: ${item.availableStock} (Max total: ${item.overstockLimit})`
+                            : `Available: ${item.availableStock}`
+                          : "Enter quantity"
+                      }
+                      value={item.quantity || ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                          // Only update if value is empty or a positive number
+                          if (value === "" || parseInt(value) >= 0) {
+                            handleProductChange(index, 'quantity', value);
+                          }
+                        }}
                       className="border border-black rounded-[12px] h-[42px] px-4 text-black outline-none"
                     />
-                  </div>
+                    {item.availableStock !== null && item.overstockLimit !== null && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Overstock protection: {item.overstockLimit} units must remain
+                      </p>
+                    )}
+                  </div>  
 
                   <button
                     onClick={() => removeProductRow(index)}
