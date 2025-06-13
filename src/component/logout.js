@@ -10,10 +10,16 @@ export default function Logout() {
   useEffect(() => {
     const logout = async () => {
       await supabase.auth.signOut();
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('user_role')
       router.push("/login"); // redirect to login
     };
     logout();
   }, [router]);
 
-  return <p>Logging out...</p>;
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <p>Logging out...</p>
+    </div>
+  )
 }

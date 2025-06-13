@@ -1,5 +1,6 @@
 "use client"
 
+import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect, useRef } from 'react'
@@ -24,6 +25,7 @@ import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
+import RequireAuth from './protectedroute';
 
 export default function HistoryOpnamePage() {
   const [items, setItems] = useState([])
@@ -214,6 +216,7 @@ export default function HistoryOpnamePage() {
       ];
 
   return (
+    <RequireAuth>
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
       {/* Top Navbar */}
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
@@ -436,5 +439,6 @@ export default function HistoryOpnamePage() {
         </div>
       </div>
     </div>
+    </RequireAuth>
   );
 }

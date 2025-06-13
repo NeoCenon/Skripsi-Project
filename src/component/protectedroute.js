@@ -1,18 +1,22 @@
-import { useRouter } from 'next/router'
-import { useAuth } from '../context/authcontext'
-import { useEffect } from 'react'
+'use client'
 
-export default function ProtectedRoute({ children }) {
-  const { user, loading } = useAuth()
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function RequireAuth({ children }) {
   const router = useRouter()
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login')
+    const token = localStorage.getItem('access_token')
+    if (!token) {
+      router.replace('/unauthorized') // redirect if not logged in
+    } else {
+      setLoading(false)
     }
-  }, [user, loading, router])
+  }, [router])
 
-  if (loading || !user) {
+  if (loading) {
     return <div>Loading...</div>
   }
 

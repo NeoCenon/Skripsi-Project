@@ -1,5 +1,6 @@
 "use client"
 
+import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect, useRef } from 'react'
@@ -156,6 +157,7 @@ export default function SupplierPage() {
       ];
 
   return (
+    <RequireAuth>
     <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
       {/* Top Navbar */}
       <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
@@ -309,5 +311,6 @@ export default function SupplierPage() {
         </div>
       </div>
     </div>
+    </RequireAuth>
   );
 }
