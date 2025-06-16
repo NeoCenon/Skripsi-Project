@@ -1,6 +1,5 @@
 "use client"
 
-import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
 import { useState, useEffect, useRef } from 'react'
@@ -110,11 +109,7 @@ export default function HistoryOpnamePage() {
           opnames (
             opname_id,
             opname_date,
-            user_id,
-            userr_id,
-            users (
-              user_name
-            )
+            user_id
           ),
           products (
             product_id,
@@ -167,8 +162,6 @@ export default function HistoryOpnamePage() {
         real_stock: item.real_stock,
         stock_difference: item.stock_difference,
         user_id: item.opnames?.user_id,
-        userr_id: item.opnames?.userr_id,
-        user_name: item.opnames?.users?.user_name,
       }));
 
       const sorted = flattened.sort((a, b) => b.opname_id - a.opname_id);
@@ -212,7 +205,6 @@ export default function HistoryOpnamePage() {
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
       { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname", active: true },
-      { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
       ];
 
   return (
@@ -360,7 +352,6 @@ export default function HistoryOpnamePage() {
                   <th className="p-4">Items</th>
                   <th className="p-4">Available Stock</th>
                   <th className="p-4">Real Stock</th>
-                  <th className="p-4">Opname By</th>
                   <th className="p-4">Stock Difference</th>
                   <th className="p-4"></th>
                 </tr>
@@ -375,7 +366,6 @@ export default function HistoryOpnamePage() {
                       <td className="p-4">{row.product_name}</td>
                       <td className="p-4">{row.product_quantity}</td>
                       <td className="p-4">{row.real_stock}</td>
-                      <td className="p-4">{row.user_name}</td>
                       <td className="p-4">{row.stock_difference}</td>
                       <td className="p-4 relative">
                         <button

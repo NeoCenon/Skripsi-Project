@@ -50,11 +50,9 @@ export default function Login() {
     localStorage.setItem('user_role', role) 
 
     if (role === 'owner') {
-      router.push('/product')
-    } else if (role === 'admin') {
-      router.push('/product') // or wherever admins should land
+      router.push('/dashboard')
     } else {
-      setErrorMsg('Unknown user role.')
+      setErrorMsg('Unknown user.')
     }
 
     setLoading(false)

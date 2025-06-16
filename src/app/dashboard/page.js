@@ -1,7 +1,4 @@
-// src/app/addstock/page.js
-
-import Dashboard from '../../component/dashboard';  // Pastikan pathnya benar
-
+import Dashboard from '../../component/dashboard';
 export default function DashboardPage() {
-  return <Dashboard />;  // Render komponen AddStock
+  return <Dashboard />; 
 }

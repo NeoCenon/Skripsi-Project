@@ -110,11 +110,7 @@ export default function ProductPage() {
           order_date,
           order_destination,
           order_status,
-          user_id,
-          userr_id,
-          users(
-            user_name
-          )
+          user_id
         ),
         products (
           product_id,
@@ -174,7 +170,6 @@ export default function ProductPage() {
       product_quantity: item.product_quantity,
       product_name: item.products?.product_name,
       product_category: item.products?.product_category,
-      user_name: item.orders?.users?.user_name,
     }));
 
     const sorted = flattened.sort((a, b) => b.order_id - a.order_id);
@@ -210,7 +205,6 @@ export default function ProductPage() {
       { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order", active: true },
       { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
       { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
-      { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
     ];
 
   return (
@@ -369,7 +363,6 @@ export default function ProductPage() {
                     <th className="p-4">Items</th>
                     <th className="p-4">Destination Address</th>
                     <th className="p-4">Quantity</th>
-                    <th className="p-4">Created By</th>
                     <th className="p-4">Status</th>
                     <th className="p-4"></th>
                   </tr>
@@ -384,7 +377,6 @@ export default function ProductPage() {
                       <td className="px-4 py-2">{row.product_name}</td>
                       <td className="px-4 py-2">{row.order_destination}</td>
                       <td className="px-4 py-2">{row.product_quantity}</td>
-                      <td className="px-4 py-2">{row.user_name}</td>
                       <td className="px-4 py-2">{row.order_status}</td>
                       <td className="p-4 relative">
                         <button
