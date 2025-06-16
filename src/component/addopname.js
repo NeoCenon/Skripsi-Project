@@ -1,112 +1,95 @@
 "use client";
 
-import Link from 'next/link';
-import { useState, useEffect, useRef } from 'react'
-import {
-  FaChartBar,
-  FaBoxOpen,
-  FaClipboardList,
-  FaTruck,
-  FaClipboardCheck,
-  FaUser,
-} from "react-icons/fa";
-import { MdOutlineInventory2 } from "react-icons/md";
-import { FiMenu, FiSearch, FiBell } from "react-icons/fi";
-import { supabase } from '../lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 
-export default function OpnamePage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const router = useRouter();
-
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const [opnameData, setOpnameData] = useState({
-    products: [{ 
-      productId: '', 
-      quantity: '', 
-    }], // dynamic list of products
-  });
-
-  const [submitting, setSubmitting] = useState(false);
-
-  const [productOptions, setProductOptions] = useState([]);
-
-  const menuItems = [
-    { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
-    { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href:"/instock" },
-    { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
-    { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
-    { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
-    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname", active: true },
-    { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
-  ];
-
+export default function AddOpname() {
+  const [user, setUser] = useState(undefined);
   const [products, setProducts] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState(null);
   const [formData, setFormData] = useState({
     productId: "",
-    items: "",
     quantity: "",
     physicalQuantity: "",
     differentStock: "",
   });
-  
-    useEffect(() => {
-      const role = localStorage.getItem('user_role')
-      if (role !== 'admin' && role !== 'owner') {
-        router.push('/unauthorized')
-      }
-    }, [])
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error && user) setUser(user);
+      else router.replace("/unauthorized");
+    };
+    getUser();
+  }, []);
 
   useEffect(() => {
     const fetchProducts = async () => {
       const { data, error } = await supabase
         .from("products")
         .select("product_id, product_name, product_quantity");
-
-      if (!error) setProducts(data);
+      if (!error) setProducts(data || []);
     };
-
     fetchProducts();
   }, []);
 
-  const handleProductChange = (e) => {
-    const selectedId = parseInt(e.target.value);
-    const product = products.find((p) => p.product_id === selectedId);
+  // Calculate difference when physicalQuantity changes
+  useEffect(() => {
+    if (formData.physicalQuantity !== "" && formData.quantity !== "") {
+      const diff = parseInt(formData.physicalQuantity || 0) - parseInt(formData.quantity || 0);
+      setFormData((prev) => ({ ...prev, differentStock: diff }));
+    } else {
+      setFormData((prev) => ({ ...prev, differentStock: "" }));
+    }
+  }, [formData.physicalQuantity, formData.quantity]);
 
-    setSelectedProduct(product);
+  const handleChange = (e) => {
+    const { name, value, type } = e.target;
+    if (name === "physicalQuantity" && value && Number(value) < 0) return;
+    setFormData({ ...formData, [name]: value });
+    setErrors({ ...errors, [name]: undefined });
+  };
+
+  const handleProductChange = (e) => {
+    const selectedId = e.target.value;
+    const product = products.find((p) => p.product_id === parseInt(selectedId));
     setFormData({
       ...formData,
       productId: selectedId,
-      items: product.product_name,
-      quantity: product.product_quantity,
+      quantity: product ? product.product_quantity : "",
+      physicalQuantity: "",
       differentStock: "",
     });
+    setErrors({});
   };
 
-  const calculateDifference = async () => {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
-    
-    if (userError || !userId) {
-      alert("User not authenticated. Please log in.");
-      return;
-    }
+  const validateForm = () => {
+    const { productId, physicalQuantity } = formData;
+    const newErrors = {};
+    if (!productId) newErrors.productId = "Product is required";
+    if (physicalQuantity === "") newErrors.physicalQuantity = "Real stock is required";
+    if (physicalQuantity && isNaN(+physicalQuantity)) newErrors.physicalQuantity = "Must be a number";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (submitting) return;
+    if (!validateForm()) return;
+    setSubmitting(true);
 
     const physicalQty = parseInt(formData.physicalQuantity || 0);
     const recordedQty = parseInt(formData.quantity || 0);
     const diff = physicalQty - recordedQty;
 
-    setFormData({ ...formData, differentStock: diff });
-  
     try {
-      // 1. Insert into `opname`
       const { data: opnameInsert, error: opnameError } = await supabase
         .from("opnames")
-        .insert([{ user_id: userId, opname_date: new Date().toISOString() }])
+        .insert([{ user_id: user.id, opname_date: new Date().toISOString() }])
         .select()
         .single();
 
@@ -121,169 +104,133 @@ export default function OpnamePage() {
           stock_difference: diff,
         }]);
 
-      if (opnameProductError) {
-        console.error("Error inserting opname_product:", opnameProductError);
-        throw opnameProductError;
-      }
+      if (opnameProductError) throw opnameProductError;
 
       alert("Opname data saved successfully.");
+      setFormData({
+        productId: "",
+        quantity: "",
+        physicalQuantity: "",
+        differentStock: "",
+      });
+      setSubmitting(false);
       router.push("/historyopname");
     } catch (error) {
-      console.error("Opname error:", error.message);
       alert("Failed to save opname data.");
+      setSubmitting(false);
     }
   };
 
+  // 🟢 FIX: Only return null after all hooks
+  if (user === undefined) return null;
+
   return (
-    <div className="flex flex-col h-screen bg-white text-black font-[Poppins]">
-      {/* Top Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24}/>
-          </button>
-          <h1 className="text-xl font-semibold">E-Inventoria</h1>
+    <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
+      <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-[#1565C0]">Add Stock Opname</h2>
+          <Link href="/historyopname">
+            <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
+          </Link>
         </div>
-
-        <div className="flex items-center gap-6">
-          <FiBell className="text-black" size={20} />
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-300 rounded-full" />
-            <span className="text-black">Admin ▾</span>
-          </div>
+        <div className="mb-6 text-sm text-gray-500 font-medium">
+          Required fields <span className="text-red-500">*</span>
         </div>
-      </div>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
-            <div className="flex flex-col items-center space-y-6 mt-6">
-              {menuItems.map((item, index) => (
-                <Link href={item.href} key={index}>
-                  <div
-                    key={index}
-                    className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${
-                      item.active ? "bg-[#203340]" : "hover:bg-[#203340]"
-                    }`}
-                  >
-                    {item.icon}
-                    <span className="mt-1 text-[10px] text-white text-center">{item.label}</span>
-                  </div>
-                </Link>
+        <form
+          className="space-y-6"
+          onSubmit={e => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+          autoComplete="off"
+        >
+          {/* Product */}
+          <div className="flex flex-col gap-1">
+            <label className="text-base font-semibold text-gray-700 mb-1">
+              Product <span className="text-red-500">*</span>
+            </label>
+            <select
+              name="productId"
+              value={formData.productId}
+              onChange={handleProductChange}
+              className={`border rounded-lg px-4 py-2 text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                errors.productId ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+              }`}
+            >
+              <option value="">Select Product</option>
+              {products.map((product) => (
+                <option key={product.product_id} value={product.product_id}>
+                  {product.product_name}
+                </option>
               ))}
-            </div>
+            </select>
+            {errors.productId && (
+              <span className="text-xs text-red-500 mt-1">{errors.productId}</span>
+            )}
           </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 bg-white p-12">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Stock Opname</h2>
+          {/* Quantity (read-only) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-base font-semibold text-gray-700 mb-1">
+              Quantity
+            </label>
+            <input
+              type="text"
+              name="quantity"
+              value={formData.quantity}
+              readOnly
+              className="bg-[#f3f3f3] border rounded-lg px-4 py-2 text-black border-gray-300"
+            />
+          </div>
+          {/* Physical Quantity */}
+          <div className="flex flex-col gap-1">
+            <label className="text-base font-semibold text-gray-700 mb-1">
+              Real Stock <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              name="physicalQuantity"
+              value={formData.physicalQuantity}
+              onChange={handleChange}
+              min={0}
+              className={`border rounded-lg px-4 py-2 text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                errors.physicalQuantity ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+              }`}
+            />
+            {errors.physicalQuantity && (
+              <span className="text-xs text-red-500 mt-1">{errors.physicalQuantity}</span>
+            )}
+          </div>
+          {/* Different Stock (read-only) */}
+          <div className="flex flex-col gap-1">
+            <label className="text-base font-semibold text-gray-700 mb-1">
+              Different Stock
+            </label>
+            <input
+              type="text"
+              name="differentStock"
+              value={formData.differentStock}
+              readOnly
+              className="bg-[#f3f3f3] border rounded-lg px-4 py-2 text-black border-gray-300"
+            />
+          </div>
+          <div className="flex justify-end gap-4 pt-4">
             <Link href="/historyopname">
-              <button className="text-2xl font-semibold hover:text-sky-700">×</button>
-            </Link>
-          </div>
-
-          <div className="h-12" />
-
-          <form
-            className="space-y-8 w-[600px]"
-            onSubmit={e => {
-              e.preventDefault();
-              calculateDifference();
-            }}
-          >
-            {/* Product */}
-            <div className="flex items-center gap-8">
-              <label className="w-[150px] text-base font-semibold text-black mb-4">
-                Items <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="items"
-                value={formData.items}
-                onChange={(e) => {
-                  const selectedProduct = products.find(
-                    (product) => product.product_name === e.target.value
-                  );
-                  if (selectedProduct) {
-                    setSelectedProduct(selectedProduct);
-                    setFormData({
-                      ...formData,
-                      productId: selectedProduct.product_id,
-                      items: selectedProduct.product_name,
-                      quantity: selectedProduct.product_quantity,
-                      differentStock: "",
-                    });
-                  }
-                }}
-                className="border border-black rounded-[12px] h-[42px] px-4 text-black outline-none w-full"
-                required
-              >
-                <option value="">Select Product</option>
-                {products.map((product) => (
-                  <option key={product.product_id} value={product.product_name}>
-                    {product.product_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Quantity (read-only) */}
-            <div className="flex items-center gap-8">
-              <label className="w-[150px] text-base font-semibold text-black mb-4">
-                Quantity
-              </label>
-              <input
-                type="text"
-                name="quantity"
-                value={formData.quantity}
-                readOnly
-                className="bg-[#f3f3f3] border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
-              />
-            </div>
-
-            {/* Physical Quantity (user input) */}
-            <div className="flex items-center gap-8">
-              <label className="w-[150px] text-base font-semibold text-black mb-4">
-                Real Stock <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="physicalQuantity"
-                value={formData.physicalQuantity}
-                onChange={handleChange}
-                className="border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
-                required
-              />
-            </div>
-
-            {/* Different Stock (read-only) */}
-            <div className="flex items-center gap-8">
-              <label className="w-[150px] text-base font-semibold text-black mb-4">
-                Different Stock
-              </label>
-              <input
-                type="text"
-                name="differentStock"
-                value={formData.differentStock}
-                readOnly
-                className="bg-[#f3f3f3] border border-black rounded-[12px] h-[42px] px-6 text-black w-full"
-              />
-            </div>
-
-            {/* Action Row */}
-            <div className="flex justify-end space-x-6">
               <button
-                type="submit"
-                className="bg-[#4AB98A] text-black font-semibold px-10 py-2 rounded-full text-[18px]"
-                disabled={!formData.productId || formData.physicalQuantity === ""}
+                type="button"
+                className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
               >
-                Calculate
+                Cancel
               </button>
-            </div>
-          </form>
-        </div>
+            </Link>
+            <button
+              type="submit"
+              disabled={submitting}
+              className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
+            >
+              {submitting ? "Submitting..." : "Submit"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

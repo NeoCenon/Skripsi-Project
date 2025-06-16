@@ -1,15 +1,10 @@
 "use client"
 
+import RequireAuth from './protectedroute';
 import Link from 'next/link';
-import { supabase } from '../lib/supabase'
-import { useState, useEffect, useRef } from 'react'
-import { 
-  FiMenu, 
-  FiSearch, 
-  FiBell, 
-  FiCalendar,
-  FiMoreVertical, 
-} from "react-icons/fi";
+import { supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { FiMenu, FiSearch, FiCalendar, FiMoreVertical } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -20,17 +15,25 @@ import {
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { DateRange } from 'react-date-range';
-import 'react-date-range/dist/styles.css'; 
+import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
-import { format } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import { useRouter } from 'next/navigation';
-import RequireAuth from './protectedroute';
+import * as XLSX from "xlsx";
+
+const menuItems = [
+  { icon: <FaChartBar size={24} />, label: "Dashboard", href: "/dashboard" },
+  { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href: "/instock" },
+  { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product" },
+  { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order" },
+  { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier" },
+  { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href: "/historyopname", active: true },
+];
 
 export default function HistoryOpnamePage() {
-  const [items, setItems] = useState([])
   const [flattenedRows, setFlattenedRows] = useState([]);
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(undefined);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openMenuIndex, setOpenMenuIndex] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -38,69 +41,65 @@ export default function HistoryOpnamePage() {
   const [searchTerm, setSearchTerm] = useState('');
   const pageSize = 5;
   const router = useRouter();
-  const [statusFilter, setStatusFilter] = useState('');
   const [dateRange, setDateRange] = useState([
-    {
-      startDate: null,
-      endDate: null,
-      key: 'selection'
-    }
+    { startDate: null, endDate: null, key: 'selection' }
   ]);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const datePickerRef = useRef();
+  const dropdownRef = useRef();
+  const menuRef = useRef();
+
   const paginatedRows = flattenedRows.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
 
+  const startDate = dateRange[0].startDate;
+  const endDate = dateRange[0].endDate;
+
+  // Fetch user
   useEffect(() => {
     const getUser = async () => {
       const { data: { user }, error } = await supabase.auth.getUser();
-      if (error) {
-        console.error("Failed to get user:", error.message);
-        return;
-      }
-      setUser(user);
+      if (!error && user) setUser(user);
+      else router.replace("/unauthorized");
     };
     getUser();
-    
   }, []);
-  console.log('Fetched user:', user);
+
+  // Fetch opnames when user or filters change
   useEffect(() => {
     if (user) fetchItems();
-  }, [user, searchTerm, currentPage, dateRange]);
+    // eslint-disable-next-line
+  }, [user, searchTerm, startDate, endDate]);
 
+  // Handle click outside for dropdown, datepicker, and edit menu
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (datePickerRef.current && !datePickerRef.current.contains(event.target)) {
+      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+      if (showDatePicker && datePickerRef.current && !datePickerRef.current.contains(event.target)) {
         setShowDatePicker(false);
+      }
+      if (openMenuIndex !== null && menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuIndex(null);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [showDropdown, showDatePicker, openMenuIndex]);
 
-  useEffect(() => {
-    const handleClickOutsideMenu = (event) => {
-      if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
-        setOpenMenuIndex(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutsideMenu);
-    return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
-  }, []);
-
-  useEffect(() => { setCurrentPage(1); }, [searchTerm]);
-  useEffect(() => { setCurrentPage(1); }, [dateRange]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, startDate, endDate]);
 
   async function fetchItems() {
     if (!user) return;
-
     try {
       setError(null);
       setLoading(true);
 
-      const { data, error: supabaseError } = await supabase 
+      const { data, error: supabaseError } = await supabase
         .from('opname_product')
         .select(`
           opname_product_id,
@@ -120,29 +119,23 @@ export default function HistoryOpnamePage() {
         `)
         .order('opname_product_id', { ascending: false });
 
-      console.log(data, supabaseError);
-      if (supabaseError) {
-        console.error("Supabase fetch error:", supabaseError);
-        throw supabaseError;
-      }
+      if (supabaseError) throw supabaseError;
 
-      // let filteredRows = filteredData;
-      const userOpnames = (data || []).filter(item => item.opnames?.user_id === user.id);
-      let filtered = userOpnames;
-      console.log("Filtered opnames after all filters:", filtered);
+      let filtered = (data || []).filter(item => item.opnames?.user_id === user.id);
 
       // Date filter
-      if (dateRange[0].startDate && dateRange[0].endDate) {
-        const start = new Date(dateRange[0].startDate);
-        const end = new Date(dateRange[0].endDate);
+      if (startDate && endDate) {
+        const start = new Date(format(startDate, "yyyy-MM-dd"));
+        const end = addDays(new Date(format(endDate, "yyyy-MM-dd")), 1);
         filtered = filtered.filter(item => {
-          const opnameDate = new Date(item.opnames?.opname_date);
-          return opnameDate >= start && opnameDate <= end;
+          const opnameDate = item.opnames?.opname_date
+            ? new Date(format(parseISO(item.opnames.opname_date), "yyyy-MM-dd"))
+            : null;
+          return opnameDate && opnameDate >= start && opnameDate < end;
         });
       }
 
       // Search filter
-      // const lowerSearch = searchTerm.toLowerCase();
       if (searchTerm.trim()) {
         const search = searchTerm.toLowerCase();
         filtered = filtered.filter(item =>
@@ -161,107 +154,122 @@ export default function HistoryOpnamePage() {
         product_category: item.products?.product_category,
         real_stock: item.real_stock,
         stock_difference: item.stock_difference,
-        user_id: item.opnames?.user_id,
       }));
 
-      const sorted = flattened.sort((a, b) => b.opname_id - a.opname_id);
-
-      setFlattenedRows(sorted);
-      setItems(filtered); // optional, in case you want full detail
-      
+      setFlattenedRows(flattened.sort((a, b) => b.opname_id - a.opname_id));
     } catch (err) {
-      console.error('Error fetching opnames:', err.message);
       setError('Failed to load opnames');
     } finally {
       setLoading(false);
     }
   }
 
-  const handleNextPage = () => {
-    setCurrentPage(prevPage => prevPage + 1);
+  const handleNextPage = () => setCurrentPage(prevPage => prevPage + 1);
+  const handlePreviousPage = () => setCurrentPage(prevPage => Math.max(1, prevPage - 1));
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("user_role");
+    router.push("/login");
   };
 
-  const handlePreviousPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(prevPage => prevPage - 1);
+  // Export to Excel function
+  const handleExport = () => {
+    if (!flattenedRows.length) {
+      alert("No data to export!");
+      return;
     }
+    const exportData = flattenedRows.map(row => ({
+      "Opname ID": row.opname_id,
+      "Created At": row.opname_date ? format(new Date(row.opname_date), 'dd/MM/yyyy') : "",
+      "Category": row.product_category,
+      "Items": row.product_name,
+      "Available Stock": row.product_quantity,
+      "Real Stock": row.real_stock,
+      "Stock Difference": row.stock_difference,
+    }));
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Opnames");
+    XLSX.writeFile(workbook, "opnames.xlsx");
   };
 
-  const totalDisplayedRows = flattenedRows.length;
-
-  // useEffect(() => {
-  //   const role = localStorage.getItem('user_role')
-  //   if (role !== 'admin' && role !== 'owner') {
-  //     router.push('/unauthorized')
-  //   }
-  // }, [])
-
-//     const totalDisplayedRows = items.reduce((acc, order) => acc + order.order_product.length, 0);
-
-    const menuItems = [
-      { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
-      { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href:"/instock" },
-      { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product" },
-      { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
-      { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
-      { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname", active: true },
-      ];
+  if (user === undefined) return null;
 
   return (
     <RequireAuth>
-    <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
-      {/* Top Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
-          </button>
-          <h1 className="text-xl font-semibold"><span>E-</span>Inventoria</h1>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <FiBell size={20} />
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span>Admin ▾</span>
+      <div className="flex flex-col h-screen bg-[#F5F6FA] text-black font-[Poppins]">
+        {/* Top Navbar */}
+        <div className="fixed top-0 left-0 right-0 z-30 flex justify-between items-center px-6 py-4 bg-white border-b w-full">
+          <div className="flex items-center">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className='menu-button p-2 hover:bg-sky-700 rounded-full hover:text-white'>
+              <FiMenu size={24} />
+            </button>
+            <div style={{ width: 32 }} />
+            <h1 className="text-2xl font-semibold text-[#5E35B1]">E-Inventoria</h1>
           </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
-            <div className="flex flex-col items-center space-y-6 mt-6">
-              {menuItems.map((item, index) => (
-                <Link href={item.href} key={index}>
-                <div
-                  key={index}
-                  className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${
-                    item.active ? "bg-[#203340]" : "hover:bg-[#203340]"
-                  }`}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowDropdown(!showDropdown)}
+              className="flex items-center gap-2 px-3 py-1 rounded hover:bg-gray-300"
+            >
+              <FaUser size={20} />
+              <span>{user?.email || "User"} ▾</span>
+            </button>
+            {showDropdown && (
+              <div
+                className="absolute right-0 mt-2 w-32 bg-white border rounded shadow z-50"
+              >
+                <button
+                  onClick={handleLogout}
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
                 >
-                  {item.icon}
-                  <span className="mt-1 text-[10px] text-white text-center">{item.label}</span>
-                </div>
-                </Link>
-              ))}
-            </div>
+                  Log Out
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col bg-white"> 
+        <div className="flex flex-1">
+          {/* Sidebar */}
+          {sidebarOpen && (
+            <div className="fixed top-16 left-0 z-20 bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4 h-[calc(100vh-4rem)]">
+              <div className="flex flex-col items-center space-y-6 mt-6">
+                {menuItems.map((item, index) => (
+                  <Link href={item.href} key={index}>
+                    <div
+                      className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${
+                        item.active ? "bg-[#203340]" : "hover:bg-[#203340]"
+                      }`}
+                    >
+                      {item.icon}
+                      <span className="mt-1 text-[10px] text-white text-center">{item.label}</span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
-          {/* Content */}
-          <div className="flex-1 flex flex-col bg-white p-6">
+          {/* Main Content */}
+          <div className={`flex-1 flex flex-col bg-white p-6 ${sidebarOpen ? "ml-[80px]" : ""} mt-16`}>
             <div className="flex justify-between items-center mb-2">
-            <h2 className="text-2xl font-semibold">Stock Opname</h2>
-              <Link href="/addopname">
-              <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
-                + Opname Stocks
-              </button>
-              </Link>
+              <h2 className="text-xl font-semibold">Stock Opname</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExport}
+                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                >
+                  Export
+                </button>
+                <Link href="/addopname">
+                  <button className="bg-[#1E88E5] text-white px-4 py-2 rounded-lg hover:bg-sky-700">
+                    + Opname Stocks
+                  </button>
+                </Link>
+              </div>
             </div>
 
             <div className="mb-4 border-b"></div>
@@ -278,7 +286,6 @@ export default function HistoryOpnamePage() {
                 />
                 <FiSearch className="absolute right-3 top-2.5 text-gray-400" size={20} />
               </div>
-            
 
               <div className="flex gap-4 items-center">
                 {/* Date Range Picker Button */}
@@ -288,20 +295,15 @@ export default function HistoryOpnamePage() {
                     className="flex items-center gap-2 px-4 h-[44px] border rounded-md text-black bg-white pr-10"
                   >
                     <FiCalendar />
-                    {dateRange[0].startDate && dateRange[0].endDate
-                      ? `${format(dateRange[0].startDate, 'dd/MM/yyyy')} - ${format(dateRange[0].endDate, 'dd/MM/yyyy')}`
+                    {startDate && endDate
+                      ? `${format(startDate, 'dd/MM/yyyy')} - ${format(endDate, 'dd/MM/yyyy')}`
                       : 'Select Date Range'}
                   </button>
-
-                  {/* Clear Button - positioned absolutely */}
-                  {dateRange[0].startDate && dateRange[0].endDate && (
+                  {/* Clear Button */}
+                  {startDate && endDate && (
                     <button
                       onClick={() =>
-                        setDateRange([{
-                          startDate: null,
-                          endDate: null,
-                          key: 'selection'
-                        }])
+                        setDateRange([{ startDate: null, endDate: null, key: 'selection' }])
                       }
                       className="absolute right-2 text-sm text-gray-500 hover:text-red-500"
                       title="Clear Date Filter"
@@ -310,7 +312,6 @@ export default function HistoryOpnamePage() {
                       ✕
                     </button>
                   )}
-
                   {showDatePicker && (
                     <div
                       ref={datePickerRef}
@@ -332,9 +333,9 @@ export default function HistoryOpnamePage() {
                       />
                     </div>
                   )}
-              </div>  
+                </div>
+              </div>
             </div>
-          </div>
 
             {/* Table */}
             {loading ? (
@@ -342,66 +343,65 @@ export default function HistoryOpnamePage() {
             ) : error ? (
               <div className="text-red-500">{error}</div>
             ) : (
-            <div className="bg-white rounded-lg overflow-visible mt-6 relative">
-              <table className="w-full border border-gray-300">
-                <thead>
-                  <tr className="border-b text-center text-sm font-medium">
-                  <th className="p-4">Opname ID</th>
-                  <th className="p-4">Created At</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4">Items</th>
-                  <th className="p-4">Available Stock</th>
-                  <th className="p-4">Real Stock</th>
-                  <th className="p-4">Stock Difference</th>
-                  <th className="p-4"></th>
-                </tr>
-                </thead>
-
-                <tbody>
-                  {paginatedRows.map((row, index) => (
-                    <tr key={index} className='text-center hover:bg-gray-100 cursor-pointer'>
-                      <td className="p-4">{row.opname_id}</td>
-                      <td className="px-4 py-2">{format(new Date(row.opname_date), 'dd/MM/yyyy')}</td>
-                      <td className="p-4">{row.product_category}</td>
-                      <td className="p-4">{row.product_name}</td>
-                      <td className="p-4">{row.product_quantity}</td>
-                      <td className="p-4">{row.real_stock}</td>
-                      <td className="p-4">{row.stock_difference}</td>
-                      <td className="p-4 relative">
-                        <button
+              <div className="bg-white rounded-lg overflow-visible mt-6 relative">
+                <table className="w-full border border-gray-300">
+                  <thead>
+                    <tr className="border-b text-center text-sm font-medium">
+                      <th className="p-4">Opname ID</th>
+                      <th className="p-4">Created At</th>
+                      <th className="p-4">Category</th>
+                      <th className="p-4">Items</th>
+                      <th className="p-4">Available Stock</th>
+                      <th className="p-4">Real Stock</th>
+                      <th className="p-4">Stock Difference</th>
+                      <th className="p-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedRows.map((row, index) => (
+                      <tr key={index} className='text-center hover:bg-gray-100 cursor-pointer'>
+                        <td className="p-4">{row.opname_id}</td>
+                        <td className="px-4 py-2">{row.opname_date ? format(new Date(row.opname_date), 'dd/MM/yyyy') : ""}</td>
+                        <td className="p-4">{row.product_category}</td>
+                        <td className="p-4">{row.product_name}</td>
+                        <td className="p-4">{row.product_quantity}</td>
+                        <td className="p-4">{row.real_stock}</td>
+                        <td className="p-4">{row.stock_difference}</td>
+                        <td className="p-4 relative">
+                          <button
                             onClick={(e) => {
-                              e.stopPropagation(); // Prevent document click handler from firing
+                              e.stopPropagation();
                               setOpenMenuIndex(openMenuIndex === index ? null : index);
                             }}
                             className="menu-button p-2 rounded-full hover:bg-blue-600 hover:text-white"
                           >
-                          <FiMoreVertical size={20} />
-                        </button>
-
-                        {openMenuIndex === index && (
-                          <div
-                            className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
-                            onClick={(e) => e.stopPropagation()} 
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(
-                                  `/editopname?opname_id=${row.opname_id}&opname_product_id=${row.opname_product_id}`
-                                );
-                              }}
-                              className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                            <FiMoreVertical size={20} />
+                          </button>
+                          {openMenuIndex === index && (
+                            <div
+                              ref={menuRef}
+                              className="menu-popup absolute right-0 top-full mt-2 w-28 bg-white border rounded shadow-lg z-50"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              Edit
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  router.push(
+                                    `/editopname?opname_id=${row.opname_id}&opname_product_id=${row.opname_product_id}`
+                                  );
+                                }}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm text-gray-700"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {/* Pagination Controls */}
@@ -413,22 +413,18 @@ export default function HistoryOpnamePage() {
               >
                 Previous
               </button>
-
               <span className="text-black font-medium">Page {currentPage}</span>
-
               <button
                 onClick={handleNextPage}
-                  disabled={currentPage >= Math.ceil(flattenedRows.length / pageSize)}
+                disabled={currentPage >= Math.ceil(flattenedRows.length / pageSize)}
                 className={`px-4 py-2 rounded ${currentPage * pageSize >= flattenedRows.length ? 'bg-gray-200 text-gray-500' : 'bg-gray-300'}`}
               >
                 Next
               </button>
             </div>
-
           </div>
         </div>
       </div>
-    </div>
     </RequireAuth>
   );
 }

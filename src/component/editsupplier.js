@@ -4,202 +4,157 @@ import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from "react";
 import { supabase } from '@/lib/supabase';
-import { FiMenu, FiBell } from "react-icons/fi";
-import {
-  FaChartBar,
-  FaBoxOpen,
-  FaClipboardList,
-  FaUser,
-  FaTruck,
-  FaClipboardCheck,
-} from "react-icons/fa";
-import { MdOutlineInventory2 } from "react-icons/md";
+
+const fields = [
+  { label: "Supplier", name: "supplierName", placeholder: "e.g. PT Sumber Makmur" },
+  { label: "Address", name: "address", placeholder: "e.g. Jl. Merdeka No. 123" },
+  { label: "Phone Number", name: "phoneNumber", placeholder: "e.g. 08123456789" },
+];
 
 export default function EditSupplierPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const supplier_id = searchParams.get('supplier_id');
 
   const [formData, setFormData] = useState({
     supplierName: '',
-    address : '',
-    phoneNumber : '',
+    address: '',
+    phoneNumber: '',
   });
-
-  const supplier_id = searchParams.get('supplier_id');
+  const [errors, setErrors] = useState({});
+  const [user, setUser] = useState(undefined);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setFormData({
-      supplierName: searchParams.get('supplier_name') || '',
-      address: searchParams.get('supplier_address') || '',
-      phoneNumber: searchParams.get('supplier_phone') || '',
-    });
-  }, [searchParams]);
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error && user) setUser(user);
+      else router.replace("/unauthorized");
+    };
+    getUser();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !supplier_id) return;
+    const fetchSupplier = async () => {
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("*")
+        .eq("supplier_id", supplier_id)
+        .single();
+
+      if (error || !data) {
+        alert("Supplier not found.");
+        router.push("/supplier");
+        return;
+      }
+
+      setFormData({
+        supplierName: data.supplier_name || "",
+        address: data.supplier_address || "",
+        phoneNumber: data.supplier_phone || "",
+      });
+
+      setLoading(false);
+    };
+    fetchSupplier();
+  }, [user, supplier_id]);
+
+  if (user === undefined) return null;
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setErrors({ ...errors, [e.target.name]: undefined });
+  };
+
+  const validateForm = () => {
+    const { supplierName, address, phoneNumber } = formData;
+    const newErrors = {};
+    if (!supplierName.trim()) newErrors.supplierName = "Supplier name is required";
+    if (!address.trim()) newErrors.address = "Address is required";
+    if (!phoneNumber.trim()) newErrors.phoneNumber = "Phone number is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleUpdate = async () => {
+    if (!validateForm()) return;
     const { supplierName, address, phoneNumber } = formData;
-
-    if (!supplierName || !address || !phoneNumber) {
-      alert("Please fill in all fields!");
-      return;
-    }
-
     const { error } = await supabase
       .from("suppliers")
       .update({
-        supplier_name: supplierName,
-        supplier_address : address,
-        supplier_phone: phoneNumber,
+        supplier_name: supplierName.trim(),
+        supplier_address: address.trim(),
+        supplier_phone: phoneNumber.trim(),
       })
       .eq("supplier_id", supplier_id);
 
     if (error) {
-      console.error(error);
-      alert("Failed to update supplier data!");
+      alert("Update failed: " + error.message);
     } else {
-      alert("Supplier updated successfully!");
+      alert("Supplier updated!");
       router.push("/supplier");
     }
   };
 
-  const menuItems = [
-    { icon: <FaChartBar size={24} />, label: "Dashboard", href: "/dashboard" },
-    { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href: "/instock" },
-    { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product" },
-    { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order" },
-    { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier", active: true },
-    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
-    { icon: <FaUser size={24} />, label: "Account Management", href: "/accountmanagement" },
-  ];
-
-  const fields = [
-    { label: "Supplier", name: "supplierName" },
-    { label: "Address", name: "address" },
-    { label: "Phone Number", name: "phoneNumber" },
-  ];
-
   return (
-    <div className="flex flex-col h-screen bg-white text-black font-[Poppins]">
-      {/* Top Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} className="text-black" />
-          </button>
-          <h1 className="text-xl font-semibold text-[#1C2D5A]">E-Inventoria</h1>
+    <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
+      <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-[#1565C0]">Edit Supplier</h2>
+          <Link href="/supplier">
+            <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
+          </Link>
+        </div>
+        <div className="mb-6 text-sm text-gray-500 font-medium">
+          Supplier ID: <span className="text-black font-medium">#{supplier_id}</span>
         </div>
 
-        <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-6">
-            <div className="flex flex-col items-center space-y-6 mt-6">
-              {menuItems.map((item, index) => (
-                <Link href={item.href} key={index}>
-                  <div
-                    className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${item.active ? "bg-[#203340]" : "hover:bg-[#203340]"}`}
-                  >
-                    {item.icon}
-                    <span className="mt-1 text-[10px] text-white text-center">
-                      {item.label}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 bg-white p-12">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Change Supplier Detail</h2>
-            <Link href="/supplier">
-              <button className="text-2xl font-semibold hover:text-sky-700">×</button>
-            </Link>
-          </div>
-
-          <div className="text-lg mb-8 font-semibold text-black">
-            Supplier ID <span className="text-gray-800 font-medium flex items-center gap-12">#{supplier_id}</span>
-          </div>
-
-          <div className="space-y-6">
-            {/* {fields.map((field, idx) => (
-              <div key={idx} className="flex items-center gap-12">
-                <label className="w-[150px] text-base font-semibold text-black">
+        {loading ? (
+          <div className="text-center text-gray-500">Loading...</div>
+        ) : (
+          <form
+            className="space-y-6"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleUpdate();
+            }}
+            autoComplete="off"
+          >
+            {fields.map((field, idx) => (
+              <div key={idx} className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
                   {field.label}
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
                 <input
                   type="text"
                   name={field.name}
                   value={formData[field.name]}
                   onChange={handleChange}
-                  className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
-                  placeholder={field.label}
+                  placeholder={field.placeholder}
+                  readOnly={field.name === "supplierName"}
+                  className={`border rounded-lg px-4 py-2 text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                    errors[field.name]
+                      ? "border-red-400 bg-red-50"
+                      : "border-gray-300 bg-gray-50"
+                  } ${field.name === "supplierName" ? "bg-gray-100 text-gray-500 cursor-not-allowed" : ""}`}
                 />
+                {errors[field.name] && (
+                  <span className="text-xs text-red-500 mt-1">{errors[field.name]}</span>
+                )}
               </div>
-            ))} */}
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">Supplier</label>
-                <input
-                type="text"
-                name="supplierName"
-                value={formData.supplierName}
-                readOnly
-                className="bg-gray-100 border border-black rounded-[12px] h-[42px] px-6 w-[400px] text-gray-500 cursor-not-allowed"
-              />
+            ))}
+            <div className="flex justify-end pt-4">
+              <button
+                type="submit"
+                className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
+              >
+                Update
+              </button>
             </div>
-
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">Address</label>
-              <input
-                type="text"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="Enter destination"
-                className="border border-black rounded-[12px] h-[42px] px-6 w-[400px]"
-                required
-              />
-            </div>
-
-            <div className="flex items-center gap-12">
-              <label className="w-[150px] text-base font-semibold text-black">Address</label>
-              <input
-                type="text"
-                name="phoneNumber"
-                value={formData.phoneNumber}
-                onChange={handleChange}
-                placeholder="Enter address"
-                className="border border-black rounded-[12px] h-[42px] px-6 w-[400px]"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="mt-12 flex justify-end w-[600px]">
-            
-            <button
-              onClick={handleUpdate}
-              className="bg-[#89E0F8] text-black font-semibold px-10 py-2 rounded-full hover:text-white hover:bg-[#5dcaf1]"
-            >
-              Update
-            </button>
-          </div>
-        </div>
+          </form>
+        )}
       </div>
     </div>
   );

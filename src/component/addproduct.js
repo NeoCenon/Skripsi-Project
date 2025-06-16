@@ -1,227 +1,186 @@
 "use client";
 
+import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase'
-import { useState } from "react";
-import { FiMenu, FiSearch, FiBell } from "react-icons/fi";
-import {
-  FaChartBar,
-  FaBoxOpen,
-  FaClipboardList,
-  FaUser,
-  FaTruck,
-  FaClipboardCheck,
-} from "react-icons/fa";
-import { MdOutlineInventory2 } from "react-icons/md";
+
+const fields = [
+  { label: "Items", name: "productName", type: "text", placeholder: "e.g. Laptop" },
+  { label: "Category", name: "category", type: "text", placeholder: "e.g. Electronics" },
+  { label: "Purchase Price", name: "purchasePrice", type: "number", placeholder: "e.g. 1000000" },
+  { label: "Sale Price", name: "salePrice", type: "number", placeholder: "e.g. 1200000" },
+  { label: "Quantity", name: "totalItems", type: "number", placeholder: "e.g. 10" },
+  { label: "Stockout Limit", name: "stockout", type: "number", placeholder: "e.g. 2" },
+  { label: "Overstock Limit", name: "overstock", type: "number", placeholder: "e.g. 100" },
+];
+
+const initialForm = {
+  productName: '',
+  category: '',
+  purchasePrice: '',
+  salePrice: '',
+  totalItems: '',
+  stockout: '',
+  overstock: '',
+};
 
 export default function AddProduct() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [formData, setFormData] = useState(initialForm);
+  const [errors, setErrors] = useState({});
+  const [user, setUser] = useState(undefined);
+  const router = useRouter();
 
-  const [formData, setFormData] = useState({
-    productName : '',
-    category: '',
-    purchasePrice: '',
-    salePrice: '',
-    totalItems: '',
-    stockout: '',
-    overstock: '',
-  })
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error && user) setUser(user);
+      else router.replace("/unauthorized");
+    };
+    getUser();
+  }, []);
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value, type } = e.target;
+    if (type === "number" && value && Number(value) < 0) return;
+    setFormData({ ...formData, [name]: value });
+    setErrors({ ...errors, [name]: undefined });
+  };
+
+  const validateForm = () => {
+    const { productName, category, purchasePrice, salePrice, totalItems, stockout, overstock } = formData;
+    const newErrors = {};
+    if (!productName.trim()) newErrors.productName = "Item name is required";
+    if (!category.trim()) newErrors.category = "Category is required";
+    if (!purchasePrice) newErrors.purchasePrice = "Purchase price is required";
+    if (!salePrice) newErrors.salePrice = "Sale price is required";
+    if (!totalItems) newErrors.totalItems = "Quantity is required";
+    if (purchasePrice && isNaN(+purchasePrice)) newErrors.purchasePrice = "Must be a number";
+    if (salePrice && isNaN(+salePrice)) newErrors.salePrice = "Must be a number";
+    if (totalItems && isNaN(+totalItems)) newErrors.totalItems = "Must be a number";
+    if (stockout && isNaN(+stockout)) newErrors.stockout = "Must be a number";
+    if (overstock && isNaN(+overstock)) newErrors.overstock = "Must be a number";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
+    if (!validateForm()) return;
     const { productName, category, purchasePrice, salePrice, totalItems, stockout, overstock } = formData;
-
-    // 2. Validation
-    if (
-      productName.trim() === '' ||
-      category.trim() === '' ||
-      purchasePrice.trim() === '' ||
-      salePrice.trim() === '' ||
-      totalItems.trim() === ''
-    ) {
-      alert('Please fill in all required fields!');
-      return;
-    }
-
-    if (
-      isNaN(parseFloat(purchasePrice)) ||
-      isNaN(parseFloat(salePrice)) ||
-      isNaN(parseInt(totalItems)) ||
-      (stockout !== null && stockout !== '' && isNaN(parseInt(stockout))) ||
-      (overstock !== null && overstock !== '' && isNaN(parseInt(overstock)))
-    ) {
-      alert('Ensure all number fields contain valid numeric values.');
-      return;
-    }
-
-    if (parseInt(totalItems) < 0 || parseInt(stockout) < 0 || parseInt(overstock) < 0) {
-    alert('Stock values cannot be negative.');
-    return;
-  }
-
-  if (parseInt(overstock) < parseInt(stockout)) {
-    alert('Overstock value cannot be less than Stockout value.');
-    return;
-  }
-
     try {
       const { data: existingProducts, error: checkError } = await supabase
         .from('products')
-        .select('product_name')
-        .eq('product_name', productName.trim());
+        .select('product_name');
 
       if (checkError) {
-        console.error("Error checking for duplicates:", checkError);
         alert('Error checking for duplicate products. Please try again.');
         return;
       }
 
-      if (existingProducts && existingProducts.length > 0) {
-        alert(`Product "${productName}" already exists!`);
+      const inputName = productName.trim().toLowerCase();
+      const isDuplicate = existingProducts?.some(
+        p => p.product_name && p.product_name.trim().toLowerCase() === inputName
+      );
+
+      if (isDuplicate) {
+        setErrors({ productName: `Product "${productName}" already exists!` });
         return;
       }
 
-    // 3. Send to Supabase
-    const cleanData = {
-      product_name: productName.trim(),
-      product_category: category.trim(),
-      purchase_price: parseFloat(purchasePrice),
-      sale_price: parseFloat(salePrice),
-      product_quantity: parseInt(totalItems),
-      product_stockout: stockout !== '' ? parseInt(stockout) : null,
-      product_overstock: overstock !== '' ? parseInt(overstock) : null,
-    };
+      const cleanData = {
+        product_name: productName.trim(),
+        product_category: category.trim(),
+        purchase_price: +purchasePrice,
+        sale_price: +salePrice,
+        product_quantity: +totalItems,
+        product_stockout: stockout ? +stockout : null,
+        product_overstock: overstock ? +overstock : null,
+        user_id: user.id,
+      };
 
-    const { data, error } = await supabase
-    .from('products')
-    .insert([cleanData])
-    .select();
-
-    if (error) {
-      console.error("Supabase Insert Error:", error.message || error);
-      alert(`Failed to save product: ${error.message || 'Unknown error'}`);
-    } else {
-      alert('Product added successfully!');
-      setFormData({
-        productName: '',
-        category: '',
-        purchasePrice: '',
-        salePrice: '',
-        totalItems: '',
-        stockout: '',
-        overstock: '',
-      });
-    }
-    }catch (err) {
-      console.error("Unexpected error:", err);
+      const { error } = await supabase.from('products').insert([cleanData]);
+      if (error) {
+        alert(`Failed to save product: ${error.message || 'Unknown error'}`);
+      } else {
+        alert('Product added successfully!');
+        setFormData(initialForm);
+        setErrors({});
+        router.push("/product");
+      }
+    } catch (err) {
       alert('An unexpected error occurred. Please try again.');
     }
   };
 
-  const menuItems = [
-    { icon: <FaChartBar size={24} />, label: "Dashboard", href:"/dashboard" },
-    { icon: <MdOutlineInventory2 size={24} />, label: "In Stocks", href:"/instock"},
-    { icon: <FaBoxOpen size={24} />, label: "Products", href:"/product", active: true  },
-    { icon: <FaClipboardList size={24} />, label: "Orders", href:"/order" },
-    { icon: <FaTruck size={24} />, label: "Suppliers", href:"/supplier" },
-    { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href:"/historyopname" },
-    { icon: <FaUser size={24} />, label: "Account Management", href:"/accountmanagement" },
-  ];
-
-  const fields = [
-    { label: "Items", name: "productName" },
-    { label: "Category", name: "category" },
-    { label: "Purchase Price", name: "purchasePrice" },
-    { label: "Sale Price", name: "salePrice" },
-    { label: "Quantity", name: "totalItems" },
-    { label: "Stockout Limit", name: "stockout" },
-    { label: "Overstock Limit", name: "overstock" },
-  ];
+  if (user === undefined) return null;
 
   return (
-    <div className="flex flex-col h-screen bg-white text-black font-[Poppins]">
-      {/* Top Navbar */}
-      <div className="flex justify-between items-center px-6 py-4 bg-white border-b">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}>
-            <FiMenu size={24} />
-          </button>
-          <h1 className="text-xl font-semibold text-[#1C2D5A]">E-Inventoria</h1>
+    <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
+      <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-bold text-[#1565C0]">Add Product</h2>
+          <Link href="/product">
+            <button className="text-2xl font-semibold text-[#9E9E9E] hover:text-[#1565C0] transition-colors">×</button>
+          </Link>
         </div>
-
-        <div className="flex items-center gap-6">
-          <FiBell size={20} className="text-black" />
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
-            <span className="text-black">Admin ▾</span>
-          </div>
+        <div className="mb-6 text-sm text-gray-500 font-medium">
+          Required fields <span className="text-red-500">*</span>
         </div>
-      </div>
-
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        {sidebarOpen && (
-          <div className="bg-[#12232E] text-white w-[80px] flex flex-col items-center pt-4">
-            <div className="flex flex-col items-center space-y-6 mt-6">
-              {menuItems.map((item, index) => (
-                <Link href={item.href} key={index}>
-                <div
-                  key={index}
-                  className={`flex flex-col items-center text-xs cursor-pointer px-2 py-3 rounded-lg ${
-                    item.active ? "bg-[#203340]" : "hover:bg-[#203340]"
-                  }`}
-                >
-                  {item.icon}
-                  <span className="mt-1 text-[10px] text-white text-center">
-                    {item.label}
-                  </span>
-                </div>
-                </Link>
-              ))}
+        <form
+          className="space-y-6"
+          onSubmit={e => {
+            e.preventDefault();
+            handleSubmit();
+          }}
+          autoComplete="off"
+        >
+          {fields.map((field, idx) => (
+            <div key={idx} className="flex flex-col gap-1">
+              <label className="text-base font-semibold text-gray-700 mb-1">
+                {field.label}
+                {(field.name === "productName" ||
+                  field.name === "category" ||
+                  field.name === "purchasePrice" ||
+                  field.name === "salePrice" ||
+                  field.name === "totalItems") && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
+              </label>
+              <input
+                type={field.type}
+                name={field.name}
+                value={formData[field.name]}
+                onChange={handleChange}
+                placeholder={field.placeholder}
+                min={field.type === "number" ? 0 : undefined}
+                className={`border rounded-lg px-4 py-2 text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                  errors[field.name]
+                    ? "border-red-400 bg-red-50"
+                    : "border-gray-300 bg-gray-50"
+                }`}
+              />
+              {errors[field.name] && (
+                <span className="text-xs text-red-500 mt-1">{errors[field.name]}</span>
+              )}
             </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 bg-white p-12">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-semibold">Add Product</h2>
+          ))}
+          <div className="flex justify-end gap-4 pt-4">
             <Link href="/product">
-              <button className="text-2xl font-semibold hover:text-sky-700">×
+              <button
+                type="button"
+                className="px-6 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+              >
+                Cancel
               </button>
             </Link>
-            
-          </div>
-
-          <div className="space-y-6">
-            {fields.map((field, idx) => (
-              <div key={idx} className="flex items-center gap-12">
-                <label className="w-[150px] text-base font-semibold text-black">
-                  {field.label}
-                </label>
-                <input
-                  type="text"
-                  name={field.name}
-                  value={formData[field.name]}
-                  onChange={handleChange}
-                  className="border border-black rounded-[12px] h-[42px] px-6 text-black w-[400px] outline-none"
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-12 flex justify-end w-[600px]">
             <button
-              onClick={handleSubmit}
-              className="bg-[#89E0F8] text-black font-semibold px-10 py-2 rounded-full hover:text-white hover:bg-[#89E0F8]"
+              type="submit"
+              className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
             >
               Submit
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
