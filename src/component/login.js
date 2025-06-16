@@ -17,8 +17,11 @@ export default function Login() {
     setErrorMsg('')
     setLoading(true)
 
+    // Normalize email to lowercase for validation and login
+    const normalizedEmail = email.trim().toLowerCase()
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: normalizedEmail,
       password,
     })
 
@@ -28,16 +31,14 @@ export default function Login() {
       return
     }
 
-    const { session, user } = data
-
-    // Optional: store JWT in localStorage or cookie
+    const { session } = data
     localStorage.setItem('access_token', session.access_token)
 
-    // Get user role from your `users` table (join by email or user ID)
+    // Get user role from your `users` table (case-insensitive email match)
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('user_role')
-      .eq('user_email', email)
+      .ilike('user_email', normalizedEmail)
       .single()
 
     if (userError || !userData) {
@@ -47,7 +48,7 @@ export default function Login() {
     }
 
     const role = userData.user_role
-    localStorage.setItem('user_role', role) 
+    localStorage.setItem('user_role', role)
 
     if (role === 'owner') {
       router.push('/dashboard')
@@ -61,12 +62,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8f9fb]">
       <div className="w-full max-w-md bg-white p-10 rounded-xl shadow-sm">
-        <h1 className="text-xl font-bold text-black mb-6">
-          <span className="text-black font-semibold">E</span>-Inventoria
-        </h1>
-
+        <h1 className="text-2xl mb-6 font-semibold text-[#5E35B1]">E-Inventoria</h1>
         <h2 className="text-lg font-semibold text-black mb-6">Login</h2>
-
         {errorMsg && <p className="text-red-600 text-sm mb-4">{errorMsg}</p>}
 
         <form onSubmit={handleLogin}>
@@ -101,7 +98,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-black text-white rounded-2xl font-semibold hover:bg-gray-800 transition disabled:opacity-60"
+            className="w-full py-3 mt-4 bg-black text-white rounded-2xl font-semibold hover:bg-gray-800 transition disabled:opacity-60"
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
@@ -109,7 +106,7 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-black">
           Not registered yet?{' '}
-          <Link href="/register" className="text-black font-medium hover:underline">
+          <Link href="/register" className="text-blue-500 hover:text-[#0033FF] text-sm font-medium hover:underline">
             Create a new account
           </Link>
         </p>

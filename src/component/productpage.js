@@ -4,14 +4,14 @@ import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 import { useState, useEffect, useRef } from 'react';
-import { FiMenu, FiSearch, FiMoreVertical } from "react-icons/fi";
+import { FiMenu, FiSearch, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
   FaClipboardList,
   FaUser,
   FaTruck,
-  FaClipboardCheck,
+  FaClipboardCheck
 } from "react-icons/fa";
 import { MdOutlineInventory2 } from "react-icons/md";
 import { useRouter } from 'next/navigation';
@@ -23,7 +23,7 @@ const menuItems = [
   { icon: <FaBoxOpen size={24} />, label: "Products", href: "/product", active: true },
   { icon: <FaClipboardList size={24} />, label: "Orders", href: "/order" },
   { icon: <FaTruck size={24} />, label: "Suppliers", href: "/supplier" },
-  { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href: "/historyopname" },
+  { icon: <FaClipboardCheck size={24} />, label: "Stock Opname", href: "/historyopname"},
 ];
 
 export default function ProductPage() {
@@ -158,8 +158,9 @@ export default function ProductPage() {
               >
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-200 text-red-500 flex items-center gap-2"
                 >
+                  <FiLogOut size={18} />
                   Log Out
                 </button>
               </div>

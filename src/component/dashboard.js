@@ -16,7 +16,7 @@ import {
   FaPiggyBank,
   FaPercentage,
 } from "react-icons/fa";
-import { FiMenu, FiCalendar } from "react-icons/fi";
+import { FiMenu, FiCalendar, FiLogOut } from "react-icons/fi";
 import { DateRange } from "react-date-range";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
@@ -300,8 +300,9 @@ export default function Dashboard() {
               >
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-200 text-red-500 flex items-center gap-2"
                 >
+                  <FiLogOut size={18} />
                   Log Out
                 </button>
               </div>

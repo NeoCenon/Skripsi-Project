@@ -4,7 +4,7 @@ import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 import { useState, useEffect, useRef } from 'react';
-import { FiMenu, FiSearch, FiCalendar, FiMoreVertical } from "react-icons/fi";
+import { FiMenu, FiSearch, FiCalendar, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
   FaChartBar,
@@ -223,8 +223,9 @@ export default function HistoryOpnamePage() {
               >
                 <button
                   onClick={handleLogout}
-                  className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                  className="block w-full text-left px-4 py-2 hover:bg-gray-200 text-red-500 flex items-center gap-2"
                 >
+                  <FiLogOut size={18} />
                   Log Out
                 </button>
               </div>
