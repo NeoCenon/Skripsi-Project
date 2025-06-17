@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import RequireAuth from './protectedroute';
 
 const fields = [
   { label: "Items", name: "productName", type: "text", placeholder: "e.g. Laptop" },
@@ -38,7 +39,7 @@ export default function AddProduct() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
@@ -115,6 +116,7 @@ export default function AddProduct() {
   if (user === undefined) return null;
 
   return (
+    <RequireAuth>
     <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
         <div className="flex justify-between items-center mb-4">
@@ -183,5 +185,6 @@ export default function AddProduct() {
         </form>
       </div>
     </div>
+    </RequireAuth>
   );
 }

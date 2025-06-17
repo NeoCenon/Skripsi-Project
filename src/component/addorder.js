@@ -1,9 +1,10 @@
 "use client";
 
 import { supabase } from '@/lib/supabase';
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import RequireAuth from './protectedroute';
 
 export default function AddOrder() {
   const [user, setUser] = useState(undefined);
@@ -23,15 +24,17 @@ export default function AddOrder() {
       else router.replace("/unauthorized");
     };
     getUser();
+  }, [router]);
+
+  // fetchProducts must be at top-level and use useCallback with dependencies
+  const fetchProducts = useCallback(async () => {
+    const { data } = await supabase.from("products").select();
+    setProductOptions(data || []);
   }, []);
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      const { data } = await supabase.from("products").select();
-      setProductOptions(data || []);
-    };
     fetchProducts();
-  }, []);
+  }, [fetchProducts]);
 
   if (user === undefined) return null;
 
@@ -143,6 +146,7 @@ export default function AddOrder() {
   };
 
   return (
+    <RequireAuth>
     <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
         <div className="flex justify-between items-center mb-4">
@@ -271,5 +275,6 @@ export default function AddOrder() {
         </form>
       </div>
     </div>
+    </RequireAuth>
   );
 }

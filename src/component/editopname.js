@@ -1,10 +1,13 @@
 "use client";
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import RequireAuth from "./protectedroute";
 
+// Move useSearchParams to props for app router compatibility
 export default function EditOpnamePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -29,11 +32,12 @@ export default function EditOpnamePage() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
+  // fetchOpname at top-level, no useCallback needed
   useEffect(() => {
-    if (!user || !opname_product_id) return;
     const fetchOpname = async () => {
+      if (!user || !opname_product_id) return;
       const { data, error } = await supabase
         .from("opname_product")
         .select(
@@ -71,7 +75,7 @@ export default function EditOpnamePage() {
       });
       setLoading(false);
     };
-    fetchOpname();
+    if (user && opname_product_id) fetchOpname();
   }, [user, opname_product_id, router]);
 
   if (user === undefined) return null;
@@ -148,106 +152,108 @@ export default function EditOpnamePage() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-[#1565C0]">Edit Stock Opname</h2>
-          <Link href="/historyopname">
-            <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
-          </Link>
+    <RequireAuth>
+      <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
+        <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-[#1565C0]">Edit Stock Opname</h2>
+            <Link href="/historyopname">
+              <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
+            </Link>
+          </div>
+          <div className="mb-6 text-sm text-gray-500 font-medium">
+            Opname ID: <span className="text-black font-medium">#{opname_id}</span>
+          </div>
+          {loading ? (
+            <div className="text-center text-gray-500">Loading...</div>
+          ) : (
+            <form
+              className="space-y-6"
+              onSubmit={e => {
+                e.preventDefault();
+                handleUpdate();
+              }}
+              autoComplete="off"
+            >
+              {/* Product Name (read only) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Items
+                </label>
+                <input
+                  type="text"
+                  name="items"
+                  value={formData.items}
+                  readOnly
+                  className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
+                />
+              </div>
+              {/* Quantity (read only) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Quantity
+                </label>
+                <input
+                  type="text"
+                  name="quantity"
+                  value={formData.quantity}
+                  readOnly
+                  className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
+                />
+              </div>
+              {/* Physical Quantity */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Real Stock <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="physicalQuantity"
+                  value={formData.physicalQuantity}
+                  onChange={handleChange}
+                  min={0}
+                  className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                    errors.physicalQuantity ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                  }`}
+                />
+                {errors.physicalQuantity && (
+                  <span className="text-xs text-red-500 mt-1">{errors.physicalQuantity}</span>
+                )}
+              </div>
+              {/* Different Stock (read only) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Different Stock
+                </label>
+                <input
+                  type="text"
+                  name="differentStock"
+                  value={formData.differentStock}
+                  readOnly
+                  className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
+                />
+              </div>
+              <div className="flex justify-between pt-4">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-6 py-2 rounded-lg bg-[#F76B6B] text-white font-semibold hover:bg-red-600"
+                  disabled={loading}
+                >
+                  Delete
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
+                  disabled={loading}
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          )}
         </div>
-        <div className="mb-6 text-sm text-gray-500 font-medium">
-          Opname ID: <span className="text-black font-medium">#{opname_id}</span>
-        </div>
-        {loading ? (
-          <div className="text-center text-gray-500">Loading...</div>
-        ) : (
-          <form
-            className="space-y-6"
-            onSubmit={e => {
-              e.preventDefault();
-              handleUpdate();
-            }}
-            autoComplete="off"
-          >
-            {/* Product Name (read only) */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Items
-              </label>
-              <input
-                type="text"
-                name="items"
-                value={formData.items}
-                readOnly
-                className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
-              />
-            </div>
-            {/* Quantity (read only) */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Quantity
-              </label>
-              <input
-                type="text"
-                name="quantity"
-                value={formData.quantity}
-                readOnly
-                className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
-              />
-            </div>
-            {/* Physical Quantity */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Real Stock <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="physicalQuantity"
-                value={formData.physicalQuantity}
-                onChange={handleChange}
-                min={0}
-                className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
-                  errors.physicalQuantity ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
-                }`}
-              />
-              {errors.physicalQuantity && (
-                <span className="text-xs text-red-500 mt-1">{errors.physicalQuantity}</span>
-              )}
-            </div>
-            {/* Different Stock (read only) */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Different Stock
-              </label>
-              <input
-                type="text"
-                name="differentStock"
-                value={formData.differentStock}
-                readOnly
-                className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
-              />
-            </div>
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-6 py-2 rounded-lg bg-[#F76B6B] text-white font-semibold hover:bg-red-600"
-                disabled={loading}
-              >
-                Delete
-              </button>
-              <button
-                type="submit"
-                className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
-                disabled={loading}
-              >
-                Update
-              </button>
-            </div>
-          </form>
-        )}
       </div>
-    </div>
+    </RequireAuth>
   );
 }

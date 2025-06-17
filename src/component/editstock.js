@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import RequireAuth from "./protectedroute";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -39,8 +40,9 @@ export default function EditInstockPage() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
+  // Fetch suppliers at top-level
   useEffect(() => {
     const fetchSuppliers = async () => {
       const { data, error } = await supabase.from("suppliers").select("supplier_id, supplier_name");
@@ -49,6 +51,7 @@ export default function EditInstockPage() {
     fetchSuppliers();
   }, []);
 
+  // Fetch instock details at top-level
   useEffect(() => {
     const fetchInstockDetails = async () => {
       if (!instock_product_id) return;
@@ -89,7 +92,6 @@ export default function EditInstockPage() {
       setInitialQuantity(data.product_quantity);
       setLoading(false);
     };
-
     if (instock_product_id) fetchInstockDetails();
   }, [instock_product_id, router]);
 
@@ -235,123 +237,125 @@ export default function EditInstockPage() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
-      <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-[#1565C0]">Edit Instock</h2>
-          <Link href="/instock">
-            <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
-          </Link>
+    <RequireAuth>
+      <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
+        <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-[#1565C0]">Edit Instock</h2>
+            <Link href="/instock">
+              <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
+            </Link>
+          </div>
+          <div className="mb-6 text-sm text-gray-500 font-medium">
+            Instock ID: <span className="text-black font-medium">#{instock_id}</span>
+          </div>
+          {loading ? (
+            <div className="text-center text-gray-500">Loading...</div>
+          ) : (
+            <form
+              className="space-y-6"
+              onSubmit={e => {
+                e.preventDefault();
+                handleUpdate();
+              }}
+              autoComplete="off"
+            >
+              {/* Product Name (read only) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Product
+                </label>
+                <input
+                  type="text"
+                  name="productName"
+                  value={formData.productName}
+                  readOnly
+                  className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
+                />
+              </div>
+              {/* Supplier */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Supplier <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="supplier"
+                  value={formData.supplier}
+                  onChange={handleChange}
+                  className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                    errors.supplier ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                  }`}
+                >
+                  <option value="">Select supplier</option>
+                  {suppliers.map((s) => (
+                    <option key={s.supplier_id} value={s.supplier_name}>
+                      {s.supplier_name}
+                    </option>
+                  ))}
+                </select>
+                {errors.supplier && (
+                  <span className="text-xs text-red-500 mt-1">{errors.supplier}</span>
+                )}
+              </div>
+              {/* Quantity */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Quantity <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  name="quantity"
+                  value={formData.quantity}
+                  onChange={handleChange}
+                  min={0}
+                  className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                    errors.quantity ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                  }`}
+                />
+                {errors.quantity && (
+                  <span className="text-xs text-red-500 mt-1">{errors.quantity}</span>
+                )}
+              </div>
+              {/* Status */}
+              <div className="flex flex-col gap-1">
+                <label className="text-base font-semibold text-gray-700 mb-1">
+                  Status <span className="text-red-500">*</span>
+                </label>
+                <select
+                  name="status"
+                  value={formData.status}
+                  onChange={handleChange}
+                  className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
+                    errors.status ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
+                  }`}
+                >
+                  {statuses.map((status, i) => (
+                    <option key={i} value={status}>{status}</option>
+                  ))}
+                </select>
+                {errors.status && (
+                  <span className="text-xs text-red-500 mt-1">{errors.status}</span>
+                )}
+              </div>
+              <div className="flex justify-between pt-4">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  className="px-6 py-2 rounded-lg bg-[#F76B6B] text-white font-semibold hover:bg-red-600"
+                >
+                  Delete
+                </button>
+                <button
+                  type="submit"
+                  className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          )}
         </div>
-        <div className="mb-6 text-sm text-gray-500 font-medium">
-          Instock ID: <span className="text-black font-medium">#{instock_id}</span>
-        </div>
-        {loading ? (
-          <div className="text-center text-gray-500">Loading...</div>
-        ) : (
-          <form
-            className="space-y-6"
-            onSubmit={e => {
-              e.preventDefault();
-              handleUpdate();
-            }}
-            autoComplete="off"
-          >
-            {/* Product Name (read only) */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Product
-              </label>
-              <input
-                type="text"
-                name="productName"
-                value={formData.productName}
-                readOnly
-                className="bg-gray-100 border rounded-lg px-4 py-2 w-full text-gray-500 cursor-not-allowed border-gray-300"
-              />
-            </div>
-            {/* Supplier */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Supplier <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="supplier"
-                value={formData.supplier}
-                onChange={handleChange}
-                className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
-                  errors.supplier ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
-                }`}
-              >
-                <option value="">Select supplier</option>
-                {suppliers.map((s) => (
-                  <option key={s.supplier_id} value={s.supplier_name}>
-                    {s.supplier_name}
-                  </option>
-                ))}
-              </select>
-              {errors.supplier && (
-                <span className="text-xs text-red-500 mt-1">{errors.supplier}</span>
-              )}
-            </div>
-            {/* Quantity */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Quantity <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                name="quantity"
-                value={formData.quantity}
-                onChange={handleChange}
-                min={0}
-                className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
-                  errors.quantity ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
-                }`}
-              />
-              {errors.quantity && (
-                <span className="text-xs text-red-500 mt-1">{errors.quantity}</span>
-              )}
-            </div>
-            {/* Status */}
-            <div className="flex flex-col gap-1">
-              <label className="text-base font-semibold text-gray-700 mb-1">
-                Status <span className="text-red-500">*</span>
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className={`border rounded-lg px-4 py-2 w-full text-black focus:outline-none focus:ring-2 focus:ring-[#5E35B1] transition ${
-                  errors.status ? "border-red-400 bg-red-50" : "border-gray-300 bg-gray-50"
-                }`}
-              >
-                {statuses.map((status, i) => (
-                  <option key={i} value={status}>{status}</option>
-                ))}
-              </select>
-              {errors.status && (
-                <span className="text-xs text-red-500 mt-1">{errors.status}</span>
-              )}
-            </div>
-            <div className="flex justify-between pt-4">
-              <button
-                type="button"
-                onClick={handleDelete}
-                className="px-6 py-2 rounded-lg bg-[#F76B6B] text-white font-semibold hover:bg-red-600"
-              >
-                Delete
-              </button>
-              <button
-                type="submit"
-                className="px-8 py-2 rounded-lg bg-[#1565C0] text-white font-semibold hover:bg-[#1A237E] transition"
-              >
-                Update
-              </button>
-            </div>
-          </form>
-        )}
       </div>
-    </div>
+    </RequireAuth>
   );
 }

@@ -3,7 +3,7 @@
 import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { FiMenu, FiSearch, FiCalendar, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
@@ -65,42 +65,10 @@ export default function OrderPage() {
       else router.replace("/unauthorized");
     };
     getUser();
-    // eslint-disable-next-line
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (user) fetchItems();
-    // eslint-disable-next-line
-  }, [user, searchTerm, statusFilter, startDate, endDate]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Dropdown
-      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-      // Date picker
-      if (showDatePicker && datePickerRef.current && !datePickerRef.current.contains(event.target)) {
-        setShowDatePicker(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDropdown, showDatePicker]);
-
-  useEffect(() => {
-    const handleClickOutsideMenu = (event) => {
-      if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
-        setOpenMenuIndex(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutsideMenu);
-    return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
-  }, []);
-
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, startDate, endDate]);
-
-  async function fetchItems() {
+  // Move fetchItems to top-level and use useCallback with dependencies
+  const fetchItems = useCallback(async () => {
     if (!user) return;
     try {
       setError(null);
@@ -174,7 +142,38 @@ export default function OrderPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user, searchTerm, statusFilter, startDate, endDate]);
+
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, statusFilter, startDate, endDate, fetchItems]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Dropdown
+      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+      // Date picker
+      if (showDatePicker && datePickerRef.current && !datePickerRef.current.contains(event.target)) {
+        setShowDatePicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDropdown, showDatePicker]);
+
+  useEffect(() => {
+    const handleClickOutsideMenu = (event) => {
+      if (!event.target.closest('.menu-button') && !event.target.closest('.menu-popup')) {
+        setOpenMenuIndex(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutsideMenu);
+    return () => document.removeEventListener('mousedown', handleClickOutsideMenu);
+  }, []);
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, startDate, endDate]);
 
   const handleNextPage = () => setCurrentPage(prevPage => prevPage + 1);
   const handlePreviousPage = () => setCurrentPage(prevPage => Math.max(1, prevPage - 1));
@@ -272,7 +271,7 @@ export default function OrderPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleExport}
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  className="bg-[#28A745] text-white px-4 py-2 rounded-lg hover:bg-green-700"
                 >
                   Export
                 </button>

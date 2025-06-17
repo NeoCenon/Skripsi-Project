@@ -3,7 +3,7 @@
 import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FiMenu, FiSearch, FiCalendar, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
@@ -66,34 +66,10 @@ export default function HistoryOpnamePage() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
-  // Fetch opnames when user or filters change
-  useEffect(() => {
-    if (user) fetchItems();
-    // eslint-disable-next-line
-  }, [user, searchTerm, startDate, endDate]);
-
-  // Handle click outside for dropdown, datepicker, and edit menu
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-      if (showDatePicker && datePickerRef.current && !datePickerRef.current.contains(event.target)) {
-        setShowDatePicker(false);
-      }
-      if (openMenuIndex !== null && menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpenMenuIndex(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDropdown, showDatePicker, openMenuIndex]);
-
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, startDate, endDate]);
-
-  async function fetchItems() {
+  // fetchItems must be at top-level and use useCallback with dependencies
+  const fetchItems = useCallback(async () => {
     if (!user) return;
     try {
       setError(null);
@@ -162,7 +138,31 @@ export default function HistoryOpnamePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user, searchTerm, startDate, endDate]);
+
+  // Fetch opnames when user or filters change
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, startDate, endDate, fetchItems]);
+
+  // Handle click outside for dropdown, datepicker, and edit menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+      if (showDatePicker && datePickerRef.current && !datePickerRef.current.contains(event.target)) {
+        setShowDatePicker(false);
+      }
+      if (openMenuIndex !== null && menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuIndex(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDropdown, showDatePicker, openMenuIndex]);
+
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, startDate, endDate]);
 
   const handleNextPage = () => setCurrentPage(prevPage => prevPage + 1);
   const handlePreviousPage = () => setCurrentPage(prevPage => Math.max(1, prevPage - 1));
@@ -261,7 +261,7 @@ export default function HistoryOpnamePage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleExport}
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  className="bg-[#28A745] text-white px-4 py-2 rounded-lg hover:bg-green-700"
                 >
                   Export
                 </button>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import RequireAuth from "./protectedroute";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import {
   FaBoxOpen,
@@ -109,156 +109,156 @@ export default function Dashboard() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
+
+  // fetchDashboardData must be at top-level and use useCallback with dependencies
+  const fetchDashboardData = useCallback(async () => {
+    let start, end;
+    if (startDate && endDate) {
+      start = toDateStringLocal(startDate);
+      end = toDateStringLocal(addDays(endDate, 1));
+    }
+
+    // Revenue
+    let orderQuery = supabase
+      .from("order_product")
+      .select("product_quantity, products(sale_price), orders!inner(order_date)");
+    if (start && end) {
+      orderQuery = orderQuery
+        .gte("orders.order_date", start)
+        .lt("orders.order_date", end);
+    }
+    const { data: revenueData } = await orderQuery;
+    const totalRevenue =
+      revenueData?.reduce(
+        (acc, row) =>
+          acc + row.product_quantity * (row.products?.sale_price || 0),
+        0
+      ) || 0;
+    setRevenue(totalRevenue);
+
+    // Expenses
+    let instockQuery = supabase
+      .from("instock_product")
+      .select("product_quantity, products(purchase_price), instocks!inner(instock_date)");
+    if (start && end) {
+      instockQuery = instockQuery
+        .gte("instocks.instock_date", start)
+        .lt("instocks.instock_date", end);
+    }
+    const { data: expenseData } = await instockQuery;
+    const totalExpenses =
+      expenseData?.reduce(
+        (acc, row) =>
+          acc + row.product_quantity * (row.products?.purchase_price || 0),
+        0
+      ) || 0;
+    setExpenses(totalExpenses);
+
+    // Income & Margin
+    const netIncome = totalRevenue - totalExpenses;
+    const marginPercent =
+      totalRevenue > 0 ? (netIncome / totalRevenue) * 100 : 0;
+    setIncome(netIncome);
+    setMargin(marginPercent.toFixed(2));
+
+    // Revenue Trend Chart
+    let orderChartQuery = supabase
+      .from("orders")
+      .select("order_id, order_date, order_product(product_quantity, products(sale_price))")
+      .order("order_date", { ascending: true });
+    const { data: orderData } = await orderChartQuery;
+    let filteredOrders = orderData;
+    if (startDate && endDate) {
+      filteredOrders = orderData?.filter((o) => {
+        const orderDate = parseISO(o.order_date);
+        return (
+          orderDate >= startDate &&
+          orderDate < addDays(endDate, 1)
+        );
+      });
+    }
+
+    const dailyMap = {};
+    filteredOrders?.forEach((order) => {
+      const date = format(parseISO(order.order_date), "yyyy-MM-dd");
+      let orderTotal = 0;
+      order.order_product?.forEach((item) => {
+        orderTotal +=
+          item.product_quantity * (item.products?.sale_price || 0);
+      });
+      if (!dailyMap[date]) dailyMap[date] = 0;
+      dailyMap[date] += orderTotal;
+    });
+    const chartPoints = Object.entries(dailyMap).map(([date, total]) => ({
+      date,
+      revenue: total,
+    }));
+    setChartData(chartPoints);
+
+    // Stock Alerts
+    const { data: stockData } = await supabase
+      .from("products")
+      .select(
+        "product_id, product_name, product_quantity, product_stockout, product_overstock, product_category, purchase_price, sale_price"
+      );
+    const alerts =
+      (stockData || [])
+        .filter((p) => {
+          const qty = p.product_quantity ?? 0;
+          const stockout = p.product_stockout ?? Infinity;
+          const overstock = p.product_overstock ?? -Infinity;
+          return qty < stockout || qty > overstock;
+        })
+        .map((p) => ({
+          ...p,
+          alert_status:
+            p.product_quantity < (p.product_stockout ?? Infinity)
+              ? "Understock"
+              : "Overstock",
+        })) || [];
+    setStockAlerts(alerts);
+    setCurrentPage(1);
+
+    // Top/Bottom Selling Products
+    let topQueryBuilder = supabase
+      .from("order_product")
+      .select(
+        "product_id, product_quantity, products(product_name, product_category, product_quantity), orders!inner(order_date)"
+      );
+    if (start && end) {
+      topQueryBuilder = topQueryBuilder
+        .gte("orders.order_date", start)
+        .lt("orders.order_date", end);
+    }
+    const { data: topData } = await topQueryBuilder;
+    const salesMap = {};
+    topData?.forEach((entry) => {
+      const id = entry.product_id;
+      if (!salesMap[id]) {
+        salesMap[id] = {
+          product_id: id,
+          product_name: entry.products?.product_name || "",
+          category: entry.products?.product_category || "",
+          units_sold: 0,
+          stock_remaining: entry.products?.product_quantity || 0,
+        };
+      }
+      salesMap[id].units_sold += entry.product_quantity;
+    });
+    let result = Object.values(salesMap);
+    result.sort((a, b) =>
+      productFilter === "top"
+        ? b.units_sold - a.units_sold
+        : a.units_sold - b.units_sold
+    );
+    result = result.slice(0, 5);
+    setTopProducts(result);
+  }, [startDate, endDate, productFilter]);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      let start, end;
-      if (startDate && endDate) {
-        start = toDateStringLocal(startDate);
-        end = toDateStringLocal(addDays(endDate, 1));
-      }
-
-      // Revenue
-      let orderQuery = supabase
-        .from("order_product")
-        .select("product_quantity, products(sale_price), orders!inner(order_date)");
-      if (start && end) {
-        orderQuery = orderQuery
-          .gte("orders.order_date", start)
-          .lt("orders.order_date", end);
-      }
-      const { data: revenueData } = await orderQuery;
-      const totalRevenue =
-        revenueData?.reduce(
-          (acc, row) =>
-            acc + row.product_quantity * (row.products?.sale_price || 0),
-          0
-        ) || 0;
-      setRevenue(totalRevenue);
-
-      // Expenses
-      let instockQuery = supabase
-        .from("instock_product")
-        .select("product_quantity, products(purchase_price), instocks!inner(instock_date)");
-      if (start && end) {
-        instockQuery = instockQuery
-          .gte("instocks.instock_date", start)
-          .lt("instocks.instock_date", end);
-      }
-      const { data: expenseData } = await instockQuery;
-      const totalExpenses =
-        expenseData?.reduce(
-          (acc, row) =>
-            acc + row.product_quantity * (row.products?.purchase_price || 0),
-          0
-        ) || 0;
-      setExpenses(totalExpenses);
-
-      // Income & Margin
-      const netIncome = totalRevenue - totalExpenses;
-      const marginPercent =
-        totalRevenue > 0 ? (netIncome / totalRevenue) * 100 : 0;
-      setIncome(netIncome);
-      setMargin(marginPercent.toFixed(2));
-
-      // Revenue Trend Chart
-      let orderChartQuery = supabase
-        .from("orders")
-        .select("order_id, order_date, order_product(product_quantity, products(sale_price))")
-        .order("order_date", { ascending: true });
-      const { data: orderData } = await orderChartQuery;
-      let filteredOrders = orderData;
-      if (startDate && endDate) {
-        filteredOrders = orderData?.filter((o) => {
-          const orderDate = parseISO(o.order_date);
-          return (
-            orderDate >= startDate &&
-            orderDate < addDays(endDate, 1)
-          );
-        });
-      }
-
-      const dailyMap = {};
-      filteredOrders?.forEach((order) => {
-        const date = format(parseISO(order.order_date), "yyyy-MM-dd");
-        let orderTotal = 0;
-        order.order_product?.forEach((item) => {
-          orderTotal +=
-            item.product_quantity * (item.products?.sale_price || 0);
-        });
-        if (!dailyMap[date]) dailyMap[date] = 0;
-        dailyMap[date] += orderTotal;
-      });
-      const chartPoints = Object.entries(dailyMap).map(([date, total]) => ({
-        date,
-        revenue: total,
-      }));
-      setChartData(chartPoints);
-
-      // Stock Alerts
-      const { data: stockData } = await supabase
-        .from("products")
-        .select(
-          "product_id, product_name, product_quantity, product_stockout, product_overstock, product_category, purchase_price, sale_price"
-        );
-      const alerts =
-        (stockData || [])
-          .filter((p) => {
-            const qty = p.product_quantity ?? 0;
-            const stockout = p.product_stockout ?? Infinity;
-            const overstock = p.product_overstock ?? -Infinity;
-            return qty < stockout || qty > overstock;
-          })
-          .map((p) => ({
-            ...p,
-            alert_status:
-              p.product_quantity < (p.product_stockout ?? Infinity)
-                ? "Understock"
-                : "Overstock",
-          })) || [];
-      setStockAlerts(alerts);
-      setCurrentPage(1);
-
-      // Top/Bottom Selling Products
-      let topQueryBuilder = supabase
-        .from("order_product")
-        .select(
-          "product_id, product_quantity, products(product_name, product_category, product_quantity), orders!inner(order_date)"
-        );
-      if (start && end) {
-        topQueryBuilder = topQueryBuilder
-          .gte("orders.order_date", start)
-          .lt("orders.order_date", end);
-      }
-      const { data: topData } = await topQueryBuilder;
-      const salesMap = {};
-      topData?.forEach((entry) => {
-        const id = entry.product_id;
-        if (!salesMap[id]) {
-          salesMap[id] = {
-            product_id: id,
-            product_name: entry.products?.product_name || "",
-            category: entry.products?.product_category || "",
-            units_sold: 0,
-            stock_remaining: entry.products?.product_quantity || 0,
-          };
-        }
-        salesMap[id].units_sold += entry.product_quantity;
-      });
-      let result = Object.values(salesMap);
-      result.sort((a, b) =>
-        productFilter === "top"
-          ? b.units_sold - a.units_sold
-          : a.units_sold - b.units_sold
-      );
-      result = result.slice(0, 5);
-      setTopProducts(result);
-    };
-
     fetchDashboardData();
-    // eslint-disable-next-line
-  }, [startDate, endDate, productFilter]);
+  }, [fetchDashboardData]);
 
   const summaryCards = [
     { title: "Revenue", value: revenue, icon: <FaMoneyBillWave size={20} /> },

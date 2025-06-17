@@ -3,7 +3,7 @@
 import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FiMenu, FiSearch, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
@@ -41,34 +41,8 @@ export default function SupplierPage() {
   const dropdownRef = useRef();
   const menuRef = useRef();
 
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
-      if (!error) setUser(user);
-      else router.replace("/unauthorized");
-    };
-    getUser();
-  }, []);
-
-  useEffect(() => {
-    if (user) fetchItems();
-    // eslint-disable-next-line
-  }, [user, searchTerm]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-      if (openMenuId && menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDropdown, openMenuId]);
-
-  const fetchItems = async () => {
+  // fetchItems must be defined before useEffect and useCallback must have dependencies
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -94,7 +68,33 @@ export default function SupplierPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, searchTerm]);
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!error) setUser(user);
+      else router.replace("/unauthorized");
+    };
+    getUser();
+  }, [router]);
+
+  useEffect(() => {
+    if (user) fetchItems();
+  }, [user, searchTerm, fetchItems]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+      if (openMenuId && menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDropdown, openMenuId]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -191,7 +191,7 @@ export default function SupplierPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleExport}
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  className="bg-[#28A745] text-white px-4 py-2 rounded-lg hover:bg-green-700"
                 >
                   Export
                 </button>

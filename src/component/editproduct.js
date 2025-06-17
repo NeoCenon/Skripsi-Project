@@ -1,7 +1,8 @@
 "use client";
+export const dynamic = "force-dynamic";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -16,9 +17,15 @@ const fields = [
 ];
 
 export default function EditProduct() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const product_id = searchParams.get("product_id");
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!product_id || isNaN(product_id)) {
+      router.replace("/product");
+    }
+  }, [product_id, router]);
 
   const [formData, setFormData] = useState({
     productName: "",
@@ -40,37 +47,43 @@ export default function EditProduct() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
+
+  // fetchProduct must be at top-level and use useCallback with dependencies
+  const fetchProduct = useCallback(async () => {
+    if (!user || !product_id) {
+      setLoading(false);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("product_id", product_id)
+      .single();
+
+    if (error || !data) {
+      alert("Product not found.");
+      setLoading(false);
+      router.push("/product");
+      return;
+    }
+
+    setFormData({
+      productName: data.product_name || "",
+      category: data.product_category || "",
+      purchasePrice: data.purchase_price?.toString() || "",
+      salePrice: data.sale_price?.toString() || "",
+      totalItems: data.product_quantity?.toString() || "",
+      stockout: data.product_stockout?.toString() || "",
+      overstock: data.product_overstock?.toString() || "",
+    });
+
+    setLoading(false);
+  }, [user, product_id, router]);
 
   useEffect(() => {
-    if (!user || !product_id) return;
-    const fetchProduct = async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("product_id", product_id)
-        .single();
-
-      if (error || !data) {
-        alert("Product not found.");
-        router.push("/product");
-        return;
-      }
-
-      setFormData({
-        productName: data.product_name || "",
-        category: data.product_category || "",
-        purchasePrice: data.purchase_price?.toString() || "",
-        salePrice: data.sale_price?.toString() || "",
-        totalItems: data.product_quantity?.toString() || "",
-        stockout: data.product_stockout?.toString() || "",
-        overstock: data.product_overstock?.toString() || "",
-      });
-
-      setLoading(false);
-    };
     fetchProduct();
-  }, [user, product_id]);
+  }, [fetchProduct]);
 
   if (user === undefined) return null;
 

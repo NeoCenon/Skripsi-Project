@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import RequireAuth from './protectedroute';
 
 const fields = [
   { label: "Supplier Name", name: "supplierName", placeholder: "e.g. PT Sumber Makmur" },
@@ -30,7 +31,7 @@ export default function AddSupplier() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -93,6 +94,7 @@ export default function AddSupplier() {
   if (user === undefined) return null;
 
   return (
+    <RequireAuth>
     <div className="flex justify-center items-center min-h-screen bg-[#F5F6FA]">
       <div className="w-full max-w-xl bg-white rounded-2xl shadow-lg p-10">
         <div className="flex justify-between items-center mb-4">
@@ -154,5 +156,6 @@ export default function AddSupplier() {
         </form>
       </div>
     </div>
+    </RequireAuth>
   );
 }

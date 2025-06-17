@@ -3,7 +3,7 @@
 import RequireAuth from './protectedroute';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FiMenu, FiSearch, FiMoreVertical, FiLogOut } from "react-icons/fi";
 import {
   FaBoxOpen,
@@ -48,29 +48,10 @@ export default function ProductPage() {
       else router.replace("/unauthorized");
     };
     getUser();
-  }, []);
+  }, [router]);
 
-  useEffect(() => {
-    if (user) fetchProducts();
-    // eslint-disable-next-line
-  }, [user, searchTerm]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      // Dropdown
-      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-      // Edit menu
-      if (openMenuId && menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showDropdown, openMenuId]);
-
-  const fetchProducts = async () => {
+  // fetchProducts must be defined with useCallback and correct dependencies
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -95,7 +76,26 @@ export default function ProductPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, searchTerm]);
+
+  useEffect(() => {
+    if (user) fetchProducts();
+  }, [user, searchTerm, fetchProducts]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Dropdown
+      if (showDropdown && dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+      // Edit menu
+      if (openMenuId && menuRef.current && !menuRef.current.contains(event.target)) {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showDropdown, openMenuId]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -200,7 +200,7 @@ export default function ProductPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleExport}
-                  className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                  className="bg-[#28A745] text-white px-4 py-2 rounded-lg hover:bg-green-700"
                 >
                   Export
                 </button>
@@ -275,7 +275,7 @@ export default function ProductPage() {
                               <Link
                                 href={{
                                   pathname: '/editproduct',
-                                  query: { ...row }
+                                  query: { product_id: row.product_id }
                                 }}
                               >
                                 <div className="px-4 py-2 hover:bg-gray-100 text-sm text-gray-700 cursor-pointer">
