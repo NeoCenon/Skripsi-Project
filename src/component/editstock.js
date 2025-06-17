@@ -243,7 +243,7 @@ export default function EditInstockPage() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-[#1565C0]">Edit Instock</h2>
             <Link href="/instock">
-              <button className="text-2xl font-semibold text-[#263238] hover:text-[#ff6b6b] transition-colors">×</button>
+              <button className="text-2xl font-semibold text-[#9E9E9E] hover:text-[#1565C0] transition-colors">×</button>
             </Link>
           </div>
           <div className="mb-6 text-sm text-gray-500 font-medium">
